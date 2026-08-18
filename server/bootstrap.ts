@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "./db";
-import { badges, hotels, users } from "@shared/schema";
+import { badges, hotels, users, slaPolicies, departments } from "@shared/schema";
 import { hashPassword } from "./auth";
 
 async function seedDefaultSlaPolicies(hotelId: number) {
