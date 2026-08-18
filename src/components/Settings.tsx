@@ -1,0 +1,1934 @@
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import Badges from "./Badges";
+import BadgeManagement from "./BadgeManagement";
+import { useState, useEffect } from "react";
+import { useToast } from "@/hooks/use-toast";
+import { useTheme } from "@/components/ui/theme-provider";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from '@/lib/queryClient';
+import { Department, departments } from "@shared/schema";
+import { Link } from "wouter";
+// import { DialogClose } from "@radix-ui/react-dialog";
+import { 
+  AlertTriangle,
+  Loader2, 
+  Plus, 
+  Trash2, 
+  Building2, 
+  UserCog, 
+  UserPlus, 
+  Settings as SettingsIcon, 
+  Award, 
+  BellRing, 
+  Volume2, 
+  VolumeX, 
+  Bell,
+  Pencil,
+  Trash
+} from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { notificationService } from "@/lib/notifications";
+
+// Telegram durumunu kontrol etmek için bileşen - hata durumlarını daha güvenli bir şekilde ele alan bileşen
+function TelegramStatusCheck() {
+  const [status, setStatus] = useState<string>("kontrol ediliyor");
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState<number>(0);
+  const maxRetries = 3;
+  
+  useEffect(() => {
+    const checkTelegramStatus = async () => {
+      try {
+        setLoading(true);
+        console.log("Telegram durumu kontrol ediliyor...");
+        
+        // 2 saniye zaman aşımı ekle
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
+        const response = await fetch('/api/telegram-status', {
+          signal: controller.signal,
+          headers: {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          throw new Error(`Telegram durumu kontrol edilemiyor: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        if (data && data.status) {
+          setStatus(data.status);
+          setError(null);
+        } else {
+          throw new Error("Telegram durumu alınamadı: Geçersiz yanıt formatı");
+        }
+      } catch (err) {
+        const errorMessage = (err as Error).message || "Bilinmeyen bir hata oluştu";
+        
+        // AbortError, zaman aşımını belirtir
+        if (errorMessage.includes('abort')) {
+          setError("Telegram durumu alınamadı: İstek zaman aşımına uğradı");
+        } else {
+          setError(errorMessage);
+        }
+        
+        console.error("Telegram durumu kontrol edilirken hata:", err);
+        
+        // Tekrar deneme mantığı
+        if (retryCount < maxRetries) {
+          console.log(`Tekrar deneniyor (${retryCount + 1}/${maxRetries})...`);
+          setTimeout(() => {
+            setRetryCount(prevCount => prevCount + 1);
+          }, 2000);  // 2 saniye sonra tekrar dene
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    checkTelegramStatus();
+  }, [retryCount]);
+  
+  return (
+    <div className="flex flex-col items-center justify-center p-4">
+      {loading ? (
+        <div className="flex flex-col items-center p-6">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-500 mb-2" />
+          <p className="text-sm text-gray-600">Telegram durumu kontrol ediliyor...</p>
+        </div>
+      ) : error ? (
+        <div className="text-center p-4 border border-red-200 bg-red-50 rounded-md">
+          <AlertTriangle className="h-8 w-8 text-red-500 mx-auto mb-2" />
+          <p className="text-sm text-red-700">{error}</p>
+          <p className="text-xs text-gray-500 mt-2">
+            Telegram bot ayarlarınızı kontrol edin.
+          </p>
+        </div>
+      ) : (
+        <div className="text-center">
+          <div className={`p-4 rounded-lg mb-4 ${status === 'ready' ? 'bg-green-50 border border-green-200' : 'bg-amber-50 border border-amber-200'}`}>
+            <p className="text-sm font-medium mb-1">
+              Durum: <span className="font-medium capitalize">{status}</span>
+            </p>
+            <p className="text-xs text-gray-600">
+              {status === 'ready' 
+                ? "Telegram bot hazır ve çalışıyor. Personele bildirimler gönderebilirsiniz." 
+                : "Telegram bot hazır değil. Lütfen ayarları kontrol edin ve botun başlatıldığından emin olun."}
+            </p>
+          </div>
+          <p className="text-xs text-blue-600">
+            Telegram botunuzu oluşturmak için <a href="https://t.me/botfather" target="_blank" rel="noreferrer" className="underline">@BotFather</a> ile görüşün.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface SettingsProps {
+  // Dışarıdan, HotelRequestSystem'den gelen otel ID'si
+  currentHotelId?: number | null;
+}
+
+export default function Settings({ currentHotelId: hotelIdFromProps }: SettingsProps) {
+  // Fallback yükleme göstergesi için state
+  const [hasError, setHasError] = useState<boolean>(false);
+  const [isDataLoaded, setIsDataLoaded] = useState<boolean>(false);
+  
+  // Ana sayfa yüklendiğinde gösterge
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      // 5 saniye içinde veri yüklenmezse hata göster
+      if (!isDataLoaded) {
+        setHasError(true);
+      }
+    }, 5000);
+    
+    return () => clearTimeout(timer);
+  }, [isDataLoaded]);
+  const { toast } = useToast();
+  const [currentHotelId, setCurrentHotelId] = useState<number | null>(null);
+  const [browserNotifications, setBrowserNotifications] = useState(false);
+  const [notificationSound, setNotificationSound] = useState(true);
+  const [notifications, setNotifications] = useState({
+    newRequest: true,
+    statusUpdate: true,
+    overdue: true
+  });
+  
+  const { theme, setTheme } = useTheme();
+  
+  const [departmentTimeout, setDepartmentTimeout] = useState("30");
+  const [escalationLevel, setEscalationLevel] = useState("Orta");
+  
+  // Otel ayarları için Telegram bot ayarları
+  const [hotelSettings, setHotelSettings] = useState<{
+    telegramBotToken?: string;
+    telegramBotUsername?: string;
+    telegramSimulationMode?: boolean;
+    departmentTimeout?: string;
+    escalationLevel?: string;
+  }>({});
+  
+  // Telegram bot ayarlarını güncellemek için mutasyon
+  const updateHotelSettingsMutation = useMutation({
+    mutationFn: async ({ hotelId, settings }: { hotelId: number, settings: string }) => {
+      const res = await apiRequest('PATCH', `/api/hotels/${hotelId}/settings`, { settings });
+      return await res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Ayarlar Güncellendi",
+        description: "Otel ayarları başarıyla güncellendi.",
+      });
+      // Verileri yeniden yükle
+      if (currentHotelId) {
+        queryClient.invalidateQueries({ queryKey: [`/api/hotels/${currentHotelId}`] });
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Hata",
+        description: `Ayarlar güncellenirken bir hata oluştu: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // Bildirim izni durumunu kontrol et
+  useEffect(() => {
+    const checkNotificationPermission = async () => {
+      if (notificationService.isNotificationsSupported()) {
+        const permission = Notification.permission;
+        setBrowserNotifications(permission === 'granted');
+      } else {
+        // Mobil tarayıcılarda veya desteklenmeyen tarayıcılarda bildirimleri devre dışı bırak
+        setBrowserNotifications(false);
+      }
+    };
+    
+    checkNotificationPermission();
+  }, []);
+  
+  // Bildirim izni isteme işlevi
+  const requestNotificationPermission = async () => {
+    // Mobil Chrome tarayıcıları için özel işlem
+    const isMobile = notificationService.checkIfMobile();
+    const isChrome = notificationService.isChromeBrowser();
+    
+    // Mobil Chrome tarayıcıları için doğrudan bildirimleri aktifleştir
+    if (isMobile && isChrome) {
+      console.log("Mobil Chrome tarayıcısı tespit edildi, bildirimleri etkinleştiriyorum...");
+      setBrowserNotifications(true);
+      toast({
+        title: "Bildirimler Etkinleştirildi",
+        description: "Mobil tarayıcınızda uygulama içi bildirimler görüntülenecek.",
+      });
+      return;
+    }
+    
+    // Diğer tarayıcılar için normal işlem
+    if (notificationService.isNotificationsSupported()) {
+      try {
+        const permission = await notificationService.requestPermission();
+        setBrowserNotifications(permission);
+        
+        if (permission) {
+          toast({
+            title: "Bildirim izni verildi",
+            description: "Artık bildirimler alabilirsiniz.",
+          });
+        } else {
+          // Mobil tarayıcıda reddedilse bile uygulama içi bildirimleri etkinleştir
+          if (isMobile) {
+            setBrowserNotifications(true);
+            toast({
+              title: "Uygulama içi bildirimler etkin",
+              description: "Mobil tarayıcınızda uygulama içi bildirimler görüntülenecek.",
+            });
+          } else {
+            toast({
+              title: "Bildirim izni reddedildi",
+              description: "Bildirimleri almak için izin vermeniz gerekiyor.",
+              variant: "destructive",
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Bildirim izni isteği başarısız oldu:", error);
+        
+        // Hata durumunda mobil cihazlar için uygulama içi bildirimleri etkinleştir
+        if (isMobile) {
+          setBrowserNotifications(true);
+          toast({
+            title: "Uygulama içi bildirimler etkin",
+            description: "Mobil tarayıcınızda uygulama içi bildirimler görüntülenecek.",
+          });
+        }
+      }
+    } else {
+      // Bildirim desteği olmayan tarayıcılar için
+      if (isMobile) {
+        // Mobil cihazlarda bildirimler her zaman etkin, uygulama içi bildirimlerle
+        setBrowserNotifications(true);
+        toast({
+          title: "Bildirimler etkinleştirildi",
+          description: "Mobil tarayıcınızda uygulama içi bildirimler görüntülenecek.",
+        });
+      } else {
+        toast({
+          title: "Bildirimler desteklenmiyor",
+          description: "Tarayıcınız bildirimler için tam destek sunmuyor.",
+          variant: "destructive", 
+        });
+        setBrowserNotifications(false);
+      }
+    }
+  };
+  
+  // Ses ayarını değiştirme işlevi
+  const toggleSound = (enable: boolean) => {
+    setNotificationSound(enable);
+    notificationService.enableSound(enable);
+    
+    toast({
+      title: enable ? "Bildirim sesi açıldı" : "Bildirim sesi kapatıldı",
+      description: enable ? "Artık bildirimlerde ses duyacaksınız." : "Artık bildirimlerde ses duymayacaksınız.",
+    });
+  };
+  
+  // Get staff data for current hotel - consider currently selected hotel for superadmins
+  // Superadmin için seçilen otel, diğer kullanıcılar için kendi otellerini kullan
+  const [selectedHotelForStaff, setSelectedHotelForStaff] = useState<number | null>(null);
+
+  // Get current user info
+  const { data: currentUser, isLoading: userLoading } = useQuery({
+    queryKey: ['/api/user'],
+  });
+  
+  // Get hotels data
+  const { data: hotels = [], isLoading: hotelsLoading } = useQuery({
+    queryKey: ['/api/hotels'],
+  });
+  
+  // Varsayılan otel ID'si - herhangi bir hata ya da yükleme durumunda güvenli bir ID değeri
+  const defaultHotelId = (hotels as any[]).length > 0 ? (hotels as any[])[0]?.id || 1 : 1;
+  
+  // Dışarıdan gelen otel ID'si değiştiğinde state'i güncelle
+  useEffect(() => {
+    // Props'tan gelen otel ID'si değiştiyse bunu uygula
+    if (hotelIdFromProps !== undefined) {
+      console.log("Settings: Dışarıdan gelen otel ID'si:", hotelIdFromProps);
+      setCurrentHotelId(hotelIdFromProps);
+      
+      // Aynı zamanda personel listesi için kullanılan ID'yi de güncelle
+      if (currentUser && currentUser.role === 'superadmin') {
+        setSelectedHotelForStaff(hotelIdFromProps);
+      }
+    }
+  }, [hotelIdFromProps, currentUser]);
+  
+  // Superadmin, seçilen otel değiştiğinde gösterilecek personelleri değiştir
+  useEffect(() => {
+    // Superadmin'in seçtiği hoteli izle ve personel listesini güncelle
+    if (currentUser && currentUser.role === 'superadmin' && selectedHotelForStaff !== null) {
+      console.log("Superadmin hotel changed, updating selectedHotelForStaff:", selectedHotelForStaff);
+      // Geçersiz kıl ve yeniden yükle
+      queryClient.invalidateQueries({ queryKey: [`/api/hotels/${selectedHotelForStaff}/users`] });
+    }
+  }, [selectedHotelForStaff, currentUser]);
+  
+  // Otel ID'si hesaplamak için güvenilir bir yol
+  // Tüm durumlar için güvenli bir fallback değeri olmalı
+  const determineEffectiveHotelId = () => {
+    // Önceliği dışarıdan belirtilen otel ID'sine ver
+    if (currentHotelId) {
+      return currentHotelId;
+    }
+    
+    // Superadmin için seçili otele veya ilk otele geri dön
+    if (currentUser && currentUser.role === 'superadmin') {
+      // Önce superadmin'in seçtiği oteli kontrol et
+      if (selectedHotelForStaff) {
+        return selectedHotelForStaff;
+      }
+      
+      // Sonra seçilen oteli kontrol et - eski kod, artık kullanılmıyor
+      // if (selectedHotel && selectedHotel.id) {
+      //   return selectedHotel.id;
+      // }
+      
+          // Sonra otel listesinin ilk öğesini kontrol et
+      if (Array.isArray(hotels) && hotels.length > 0 && hotels[0]) {
+        return (hotels as any[])[0].id;
+      }
+      
+      // En son varsayılan değere dön
+      return defaultHotelId;
+    }
+    
+    // Normal kullanıcılar için kendi otellerine dön
+    if (currentUser && currentUser.hotelId) {
+      return currentUser.hotelId;
+    }
+    
+    // Hiçbir koşul gerçekleşmezse varsayılan değeri döndür
+    return defaultHotelId;
+  };
+  
+  const effectiveHotelIdForSettings = determineEffectiveHotelId();
+  
+  console.log("Effective hotel ID for settings:", effectiveHotelIdForSettings);
+  
+  const { data: currentHotel, isLoading: hotelLoading } = useQuery({
+    queryKey: [`/api/hotels/${effectiveHotelIdForSettings}`],
+    enabled: !!effectiveHotelIdForSettings,
+  });
+  
+  // Fetch current user info to get hotelId
+  useEffect(() => {
+    if (currentUser && currentUser.hotelId) {
+      // Normal kullanıcılar için kendi otellerini ayarla
+      if (currentUser.role !== 'superadmin') {
+        setCurrentHotelId(currentUser.hotelId);
+      }
+      
+      // Load user settings from user data
+      if (currentUser.settings) {
+        try {
+          const userSettings = JSON.parse(currentUser.settings);
+          if (userSettings.departmentTimeout) {
+            setDepartmentTimeout(userSettings.departmentTimeout);
+          }
+          if (userSettings.escalationLevel) {
+            setEscalationLevel(userSettings.escalationLevel);
+          }
+          if (userSettings.notifications) {
+            setNotifications(userSettings.notifications);
+          }
+          if (userSettings.notificationSound !== undefined) {
+            setNotificationSound(userSettings.notificationSound);
+            notificationService.enableSound(userSettings.notificationSound);
+          }
+          // browserNotifications is handled by the permission system
+          // Don't set theme here as it's handled by the ThemeProvider
+        } catch (e) {
+          console.error("Error parsing user settings:", e);
+        }
+      }
+    }
+  }, [currentUser]);
+  
+  // If user is admin, also check hotel settings
+  useEffect(() => {
+    if (currentHotel && currentHotel.settings) {
+      try {
+        const parsedHotelSettings = JSON.parse(currentHotel.settings);
+        // Otel ayarlarını güncelle
+        setHotelSettings(parsedHotelSettings);
+        
+        // Genel ayarları uygula
+        if (parsedHotelSettings.departmentTimeout) {
+          setDepartmentTimeout(parsedHotelSettings.departmentTimeout);
+        }
+        if (parsedHotelSettings.escalationLevel) {
+          setEscalationLevel(parsedHotelSettings.escalationLevel);
+        }
+      } catch (e) {
+        console.error("Error parsing hotel settings:", e);
+      }
+    }
+  }, [currentHotel]);
+  
+  // Handle notification toggle
+  const handleNotificationToggle = (key: keyof typeof notifications) => {
+    setNotifications(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+  
+  // Handle save settings - kullanıcı ve otel ayarlarını kaydet
+  const handleSaveSettings = () => {
+    // Kullanıcı ayarlarını kaydet
+    const userSettings = {
+      notifications,
+      browserNotifications, 
+      notificationSound,
+      theme,
+      departmentTimeout,
+      escalationLevel
+    };
+
+    // Otel ayarlarını da ayarla
+    const hotelSettings = {
+      departmentTimeout,
+      escalationLevel
+    };
+
+    // 1. Kullanıcı ayarlarını API'ye gönder
+    const saveUserSettings = currentUser && currentUser.id
+      ? apiRequest('PATCH', `/api/users/${currentUser.id}/settings`, { 
+          settings: JSON.stringify(userSettings) 
+        })
+      : Promise.resolve();
+    
+    // 2. Hotel ayarlarını güncelle (eğer admin yetkimiz varsa)
+    const saveHotelSettings = (currentUser && 
+      (currentUser.role === 'admin' || currentUser.role === 'superadmin') && 
+      effectiveHotelIdForSettings)
+      ? apiRequest('PATCH', `/api/hotels/${effectiveHotelIdForSettings}/settings`, {
+          departmentTimeout
+        })
+      : Promise.resolve();
+    
+    // İki ayarı da kaydet ve sonucu göster
+    Promise.all([saveUserSettings, saveHotelSettings])
+      .then(() => {
+        // Başarıyla kaydettikten sonra sorguları geçersiz kıl ve yeni verileri getir
+        if (currentUser && currentUser.id) {
+          queryClient.invalidateQueries({ queryKey: ['/api/user'] });
+        }
+        
+        if (effectiveHotelIdForSettings) {
+          queryClient.invalidateQueries({ queryKey: [`/api/hotels/${effectiveHotelIdForSettings}`] });
+        }
+        
+        toast({
+          title: "Ayarlar kaydedildi",
+          description: "Tüm ayarlarınız başarıyla kaydedildi.",
+        });
+      })
+      .catch(error => {
+        toast({
+          title: "Hata",
+          description: `Ayarlar kaydedilirken bir hata oluştu: ${error.message}`,
+          variant: "destructive"
+        });
+      });
+  };
+  
+  // Handle reset to defaults
+  const handleResetDefaults = () => {
+    setNotifications({
+      newRequest: true,
+      statusUpdate: true,
+      overdue: true
+    });
+    setTheme("light");
+    setDepartmentTimeout("30");
+    setEscalationLevel("Orta");
+    setNotificationSound(true);
+    notificationService.enableSound(true);
+    
+    toast({
+      title: "Varsayılan ayarlar",
+      description: "Ayarlar varsayılan değerlere sıfırlandı.",
+    });
+  };
+  
+  // Hotel state management
+  const [isHotelFormOpen, setIsHotelFormOpen] = useState(false);
+  const [hotelForm, setHotelForm] = useState({
+    name: '',
+    address: '',
+    phone: '',
+    email: '',
+    // Otel yöneticisi bilgileri
+    adminUsername: '',
+    adminPassword: '',
+    adminFirstName: '',
+    adminLastName: '',
+  });
+
+  // Staff management state
+  const [isStaffFormOpen, setIsStaffFormOpen] = useState(false);
+  const [staffForm, setStaffForm] = useState({
+    username: '',
+    password: '',
+    firstName: '',
+    lastName: '',
+    department: departments[0] as string,
+    role: 'staff',
+    telegramUsername: '' // Telegram kullanıcı adı için alan
+  });
+
+  // Current user info
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
+  
+  useEffect(() => {
+    if (currentUser) {
+      setCurrentUserRole(currentUser.role || 'staff');
+    }
+  }, [currentUser]);
+  
+  // Otel düzenleme ve silme için ekstra state'ler
+  const [isEditHotelFormOpen, setIsEditHotelFormOpen] = useState(false);
+  const [isDeleteHotelDialogOpen, setIsDeleteHotelDialogOpen] = useState(false);
+  const [selectedHotel, setSelectedHotel] = useState<any | null>(null);
+  
+  // Otel düzenleme için mutation
+  const updateHotelMutation = useMutation({
+    mutationFn: async (hotelData: any) => {
+      const res = await apiRequest('PATCH', `/api/hotels/${hotelData.id}`, hotelData);
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/hotels'] });
+      setIsEditHotelFormOpen(false);
+      setSelectedHotel(null);
+      toast({
+        title: "Otel güncellendi",
+        description: "Otel bilgileri başarıyla güncellendi.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Hata",
+        description: `Otel güncellenirken bir hata oluştu: ${error.message}`,
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Otel silme için mutation
+  const deleteHotelMutation = useMutation({
+    mutationFn: async (hotelId: number) => {
+      await apiRequest('DELETE', `/api/hotels/${hotelId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/hotels'] });
+      setIsDeleteHotelDialogOpen(false);
+      setSelectedHotel(null);
+      toast({
+        title: "Otel silindi",
+        description: "Otel başarıyla silindi.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Hata",
+        description: `Otel silinirken bir hata oluştu: ${error.message}`,
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Otel düzenleme form handler
+  const handleEditHotelFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedHotel) return;
+    
+    const form = e.target as HTMLFormElement;
+    const formData = new FormData(form);
+    
+    const hotelData = {
+      id: selectedHotel.id,
+      name: formData.get('name') as string,
+      address: formData.get('address') as string,
+      phone: formData.get('phone') as string,
+      email: formData.get('email') as string,
+    };
+    
+    updateHotelMutation.mutate(hotelData);
+  };
+  
+  // Otel silme handler
+  const handleDeleteHotel = () => {
+    if (!selectedHotel) return;
+    deleteHotelMutation.mutate(selectedHotel.id);
+  };
+
+  // Kullanıcının kendi oteli veya superadmin ise seçilen otel
+  // Superadmin için seçilen otele bakalım ve güvenli fallback mekanizmasını kullan
+  const effectiveHotelId = currentUser?.role === 'superadmin' 
+    ? (selectedHotelForStaff || currentHotelId || effectiveHotelIdForSettings || defaultHotelId) 
+    : (currentUser?.hotelId || defaultHotelId);
+  
+  console.log("Personel listesi için kullanılan otel ID:", effectiveHotelId);
+  
+  const { data: staff = [], isLoading: staffLoading } = useQuery({
+    queryKey: [`/api/hotels/${effectiveHotelId}/users`], 
+    enabled: !!effectiveHotelId, // Only run query when hotelId is available
+  });
+
+  // Mutation for creating a new hotel
+  const createHotelMutation = useMutation({
+    mutationFn: async (data: typeof hotelForm) => {
+      const { adminUsername, adminPassword, adminFirstName, adminLastName, ...hotelData } = data;
+      
+      // İlk olarak oteli oluştur
+      const hotelResponse = await apiRequest('POST', '/api/hotels', hotelData);
+      const newHotel = await hotelResponse.json();
+      
+      // Ardından otel yöneticisini oluştur
+      if (adminUsername && adminPassword) {
+        const adminData = {
+          username: adminUsername,
+          password: adminPassword,
+          firstName: adminFirstName || '',
+          lastName: adminLastName || '',
+          role: 'admin', 
+          hotelId: newHotel.id
+        };
+        
+        await apiRequest('POST', '/api/register', adminData);
+      }
+      
+      return newHotel;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/hotels'] });
+      setIsHotelFormOpen(false);
+      setHotelForm({ 
+        name: '', 
+        address: '', 
+        phone: '', 
+        email: '', 
+        adminUsername: '',
+        adminPassword: '',
+        adminFirstName: '',
+        adminLastName: ''
+      });
+      toast({
+        title: "Otel Kaydedildi",
+        description: "Yeni otel işletmesi ve yöneticisi başarıyla kaydedildi.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Hata",
+        description: `Otel kaydedilirken bir hata oluştu: ${error.message}`,
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Mutation for creating a new staff member
+  const createStaffMutation = useMutation({
+    mutationFn: async (data: typeof staffForm) => {
+      // Kullanıcının departmanını ve otel ID'sini ekleyerek kaydet
+      const staffData = {
+        ...data,
+        hotelId: currentUser?.hotelId || 1, // Kullanıcının otel ID'sini kullan, yoksa 1 kullan
+      };
+      console.log("Personel ekleme isteği gönderiliyor:", staffData);
+      return apiRequest('POST', '/api/register', staffData);
+    },
+    onSuccess: () => {
+      // Kullanıcının bağlı olduğu oteli kullanarak doğru sorguyu geçersiz kıl
+      if (currentUser && currentUser.hotelId) {
+        queryClient.invalidateQueries({ queryKey: [`/api/hotels/${currentUser.hotelId}/users`] }); 
+      } else {
+        // Varsayılan olarak tüm otel kullanıcılarını yenile
+        queryClient.invalidateQueries({ queryKey: ['/api/hotels'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/hotels/1/users'] }); 
+      }
+      
+      setIsStaffFormOpen(false);
+      setStaffForm({
+        username: '',
+        password: '',
+        firstName: '',
+        lastName: '',
+        department: departments[0] as string,
+        role: 'staff',
+        telegramUsername: ''
+      });
+      toast({
+        title: "Personel Kaydedildi",
+        description: "Yeni personel başarıyla kaydedildi.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Hata",
+        description: `Personel kaydedilirken bir hata oluştu: ${error.message}`,
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Handle hotel form changes
+  const handleHotelFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setHotelForm(prev => ({ ...prev, [name]: value }));
+  };
+
+  // Handle staff form changes
+  const handleStaffFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setStaffForm(prev => ({ ...prev, [name]: value }));
+  };
+
+  // Handle hotel form submit
+  const handleHotelFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    createHotelMutation.mutate(hotelForm);
+  };
+
+  // Handle staff form submit
+  const handleStaffFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    createStaffMutation.mutate(staffForm);
+  };
+
+  // Determine if user has admin permissions
+  const isAdmin = currentUserRole === 'admin' || currentUserRole === 'superadmin';
+
+  // Yükleme durumunu kontrol et
+  const apiLoading = userLoading || hotelsLoading || hotelLoading;
+
+  // Yükleme durumunda bir gösterge göster
+  if (apiLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[500px]">
+        <div className="flex flex-col items-center space-y-4">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+          <p className="text-muted-foreground">Ayarlar yükleniyor...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="p-6">
+      <Tabs defaultValue="general" className="w-full">
+        <TabsList className="grid w-full grid-cols-4 mb-4">
+          <TabsTrigger value="general">
+            <SettingsIcon className="w-4 h-4 mr-2" />
+            Genel Ayarlar
+          </TabsTrigger>
+          <TabsTrigger value="hotel" disabled={currentUserRole !== 'superadmin'}>
+            <Building2 className="w-4 h-4 mr-2" />
+            Otel Yönetimi
+          </TabsTrigger>
+          <TabsTrigger value="staff" disabled={currentUserRole !== 'admin' && currentUserRole !== 'superadmin'}>
+            <UserCog className="w-4 h-4 mr-2" />
+            Personel Yönetimi
+          </TabsTrigger>
+          <TabsTrigger value="badges">
+            <Award className="w-4 h-4 mr-2" />
+            Rozetler
+          </TabsTrigger>
+        </TabsList>
+
+        {/* General Settings Tab */}
+        <TabsContent value="general">
+          <Card>
+            <CardHeader>
+              <CardTitle>Genel Ayarlar</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div>
+                <h4 className="text-base font-medium text-gray-800 mb-3">Bildirim Tercihleri</h4>
+                
+                <div className="space-y-4 mb-4">
+                  <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center">
+                        <BellRing className="h-5 w-5 text-indigo-500 mr-2" />
+                        <Label className="text-sm font-medium">Tarayıcı Bildirimleri</Label>
+                      </div>
+                      {browserNotifications ? (
+                        <div className="bg-green-50 text-green-700 text-xs font-medium px-2 py-1 rounded-full border border-green-200">
+                          Aktif
+                        </div>
+                      ) : (
+                        <div className="bg-amber-50 text-amber-700 text-xs font-medium px-2 py-1 rounded-full border border-amber-200">
+                          Devre Dışı
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-sm text-slate-600 mb-3">
+                      Tarayıcı bildirimleri, uygulama açık değilken bile bildirim almanızı sağlar.
+                    </p>
+                    <Button 
+                      variant={browserNotifications ? "outline" : "default"} 
+                      size="sm"
+                      onClick={requestNotificationPermission}
+                      disabled={browserNotifications}
+                    >
+                      {browserNotifications ? 'Bildirimler Etkin' : 'Bildirimleri Etkinleştir'}
+                    </Button>
+                  </div>
+                  
+                  {/* Telegram API Ayarları */}
+                  <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center">
+                        <Bell className="h-5 w-5 text-blue-500 mr-2" />
+                        <Label className="text-sm font-medium">Telegram API Ayarları</Label>
+                      </div>
+                      <div className="bg-blue-50 text-blue-700 text-xs font-medium px-2 py-1 rounded-full border border-blue-200">
+                        Bot Entegrasyonu
+                      </div>
+                    </div>
+                    <p className="text-sm text-slate-600 mb-3">
+                      Telegram üzerinden bildirim göndermek için Telegram Bot API anahtarını yapılandırın.
+                      Her otel kendi Telegram botunu BotFather üzerinden oluşturarak API anahtarını buraya girmeli.
+                    </p>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="telegramBotToken" className="text-right text-sm">
+                          Bot Token
+                        </Label>
+                        <Input
+                          id="telegramBotToken"
+                          placeholder="1234567890:ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                          className="col-span-3"
+                          value={hotelSettings?.telegramBotToken || ""}
+                          onChange={(e) => setHotelSettings({
+                            ...hotelSettings,
+                            telegramBotToken: e.target.value
+                          })}
+                        />
+                      </div>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="telegramBotUsername" className="text-right text-sm">
+                          Bot Kullanıcı Adı
+                        </Label>
+                        <Input
+                          id="telegramBotUsername"
+                          placeholder="@OtelinizBot"
+                          className="col-span-3"
+                          value={hotelSettings?.telegramBotUsername || ""}
+                          onChange={(e) => setHotelSettings({
+                            ...hotelSettings,
+                            telegramBotUsername: e.target.value
+                          })}
+                        />
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <Link 
+                          href="https://t.me/botfather" 
+                          target="_blank" 
+                          rel="noreferrer"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            window.open('https://t.me/botfather', '_blank', 'noopener,noreferrer');
+                          }}
+                          className="text-xs text-blue-600 hover:text-blue-800 flex items-center"
+                        >
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                          >
+                            Telegram Bot Oluştur
+                          </Button>
+                        </Link>
+                        <Button 
+                          variant="default" 
+                          size="sm"
+                          onClick={() => {
+                            // Geçerli bir hotel ID'si bulma - daha güvenli bir yöntem
+                            const targetHotelId = effectiveHotelIdForSettings || 
+                                                 currentHotelId || 
+                                                 selectedHotel?.id || 
+                                                 (currentUser && currentUser.role === 'admin' ? currentUser.hotelId : 
+                                                 (Array.isArray(hotels) && hotels.length > 0 ? (hotels as any[])[0].id : 1));
+                            
+                            if (targetHotelId) {
+                              console.log("Telegram ayarları kaydediliyor - hedef otel:", targetHotelId, "ayarlar:", hotelSettings);
+                              
+                              // Bu doğrudan API endpoint formatına uymalı
+                              apiRequest('PATCH', `/api/hotels/${targetHotelId}/settings`, { 
+                                settings: JSON.stringify(hotelSettings) 
+                              })
+                              .then(response => {
+                                if (!response.ok) {
+                                  throw new Error('Ayarlar kaydedilemedi');
+                                }
+                                return response.json();
+                              })
+                              .then(() => {
+                                // Sorguları geçersiz kılarak verilerin yenilenmesini sağla
+                                queryClient.invalidateQueries({ queryKey: [`/api/hotels/${targetHotelId}`] });
+                                
+                                toast({
+                                  title: "Telegram Ayarları Kaydedildi",
+                                  description: "Telegram bildirim servisi yapılandırması güncellendi.",
+                                });
+                              })
+                              .catch(error => {
+                                console.error("Telegram ayarları kaydedilirken hata:", error);
+                                toast({
+                                  title: "Ayarlar Kaydedilemedi",
+                                  description: "Telegram ayarlarını kaydederken bir hata oluştu: " + error.message,
+                                  variant: "destructive"
+                                });
+                              });
+                            } else {
+                              toast({
+                                title: "Ayarlar Kaydedilemedi",
+                                description: "Telegram ayarlarını kaydetmek için bir otel seçilmelidir.",
+                                variant: "destructive"
+                              });
+                            }
+                          }}
+                        >
+                          Kaydet
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Bildirimleri Test Et butonu */}
+                  <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center">
+                        <Bell className="h-5 w-5 text-indigo-500 mr-2" />
+                        <Label className="text-sm font-medium">Bildirimleri Test Et</Label>
+                      </div>
+                    </div>
+                    <p className="text-sm text-slate-600 mb-3">
+                      Tarayıcı ve uygulama içi bildirimleri test etmek için bir örnek bildirim gönderin.
+                    </p>
+                    <div className="space-y-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          // Genel test bildirimi gönder
+                          notificationService.showNotification({
+                            title: "Test Bildirimi",
+                            body: "Bu bir test bildirimidir. Bildirimleriniz doğru şekilde çalışıyor.",
+                            requestId: 999
+                          });
+                          
+                          toast({
+                            title: "Test bildirimi gönderildi",
+                            description: "Bildirimlerin doğru şekilde çalıştığından emin olun."
+                          });
+                        }}
+                      >
+                        Test Bildirimi Gönder
+                      </Button>
+                      
+                      <div className="flex items-center space-x-2 mt-2">
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => {
+                            // Sadece ses testi
+                            notificationService.playNotificationSound();
+                            
+                            toast({
+                              title: "Ses testi",
+                              description: "Bildirim sesini duydunuz mu?"
+                            });
+                          }}
+                        >
+                          <Volume2 className="h-4 w-4 mr-1" />
+                          Ses Testi
+                        </Button>
+                        
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => {
+                            // Sadece uygulama içi bildirim testi
+                            notificationService.showInAppNotification({
+                              title: "Uygulama İçi Bildirim Testi",
+                              body: "Bu bir uygulama içi bildirim testidir.",
+                              requestId: 999
+                            });
+                          }}
+                        >
+                          <BellRing className="h-4 w-4 mr-1" />
+                          Uygulama İçi
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center">
+                        {notificationSound ? (
+                          <Volume2 className="h-5 w-5 text-indigo-500 mr-2" />
+                        ) : (
+                          <VolumeX className="h-5 w-5 text-slate-500 mr-2" />
+                        )}
+                        <Label className="text-sm font-medium">Bildirim Sesleri</Label>
+                      </div>
+                      <Switch
+                        id="notification-sound"
+                        checked={notificationSound}
+                        onCheckedChange={toggleSound}
+                      />
+                    </div>
+                    <p className="text-sm text-slate-600">
+                      Bildirim geldiğinde sesli uyarı alın.
+                    </p>
+                  </div>
+                </div>
+                
+                <h5 className="text-sm font-medium text-gray-700 mb-2">Bildirim Türleri</h5>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="notification-new" className="cursor-pointer">
+                      Yeni istek oluşturulduğunda bildir
+                    </Label>
+                    <Switch
+                      id="notification-new"
+                      checked={notifications.newRequest}
+                      onCheckedChange={() => handleNotificationToggle('newRequest')}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="notification-update" className="cursor-pointer">
+                      İstek durumu değiştiğinde bildir
+                    </Label>
+                    <Switch
+                      id="notification-update"
+                      checked={notifications.statusUpdate}
+                      onCheckedChange={() => handleNotificationToggle('statusUpdate')}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="notification-overdue" className="cursor-pointer">
+                      Geciken istekler için bildir
+                    </Label>
+                    <Switch
+                      id="notification-overdue"
+                      checked={notifications.overdue}
+                      onCheckedChange={() => handleNotificationToggle('overdue')}
+                    />
+                  </div>
+                </div>
+              </div>
+              
+              <Separator />
+              
+              <div>
+                <h4 className="text-base font-medium text-gray-800 mb-3">Görünüm</h4>
+                <RadioGroup value={theme} onValueChange={setTheme}>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="light" id="theme-light" />
+                    <Label htmlFor="theme-light">Açık Tema</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="dark" id="theme-dark" />
+                    <Label htmlFor="theme-dark">Koyu Tema</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="system" id="theme-system" />
+                    <Label htmlFor="theme-system">Sistem Ayarlarını Kullan</Label>
+                  </div>
+                </RadioGroup>
+              </div>
+              
+              <Separator />
+              
+              <div>
+                <h4 className="text-base font-medium text-gray-800 mb-3">İstek Yönetimi</h4>
+                <div className="space-y-3">
+                  <div className="flex flex-col space-y-1">
+                    <Label htmlFor="department-timeout">
+                      İstek Zaman Aşımı (dakika)
+                    </Label>
+                    <Input
+                      id="department-timeout"
+                      type="number"
+                      value={departmentTimeout}
+                      onChange={(e) => setDepartmentTimeout(e.target.value)}
+                      min="5"
+                      max="120"
+                      className="max-w-xs"
+                    />
+                  </div>
+                  
+                  <div className="flex flex-col space-y-1">
+                    <Label htmlFor="escalation-level">
+                      Uyarı Seviyesi
+                    </Label>
+                    <Select
+                      value={escalationLevel}
+                      onValueChange={setEscalationLevel}
+                    >
+                      <SelectTrigger id="escalation-level" className="max-w-xs">
+                        <SelectValue placeholder="Uyarı seviyesi seçin" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Düşük">Düşük</SelectItem>
+                        <SelectItem value="Orta">Orta</SelectItem>
+                        <SelectItem value="Yüksek">Yüksek</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+              
+              <Separator />
+              
+              <div className="pt-2 flex justify-end">
+                <Button 
+                  variant="outline" 
+                  onClick={handleResetDefaults}
+                  className="mr-3"
+                >
+                  Varsayılana Sıfırla
+                </Button>
+                <Button 
+                  onClick={handleSaveSettings}
+                  disabled={userLoading || !currentUser}
+                >
+                  Ayarları Kaydet
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Hotel Management Tab - Only shown to superadmins */}
+        <TabsContent value="hotel">
+          {currentUserRole === 'superadmin' ? (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                <CardTitle>Otel İşletmesi Yönetimi</CardTitle>
+                <Dialog open={isHotelFormOpen} onOpenChange={setIsHotelFormOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="sm">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Yeni Otel Ekle
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Yeni Otel İşletmesi Ekle</DialogTitle>
+                    <DialogDescription>
+                      Sisteme yeni bir otel işletmesi kaydetmek için aşağıdaki bilgileri doldurun.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={handleHotelFormSubmit}>
+                    <div className="grid gap-4 py-4">
+                      <h4 className="font-medium text-gray-800 mb-1">Otel Bilgileri</h4>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="name" className="text-right">
+                          İşletme Adı
+                        </Label>
+                        <Input
+                          id="name"
+                          name="name"
+                          value={hotelForm.name}
+                          onChange={handleHotelFormChange}
+                          className="col-span-3"
+                          required
+                        />
+                      </div>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="address" className="text-right">
+                          Adres
+                        </Label>
+                        <Input
+                          id="address"
+                          name="address"
+                          value={hotelForm.address}
+                          onChange={handleHotelFormChange}
+                          className="col-span-3"
+                        />
+                      </div>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="phone" className="text-right">
+                          Telefon
+                        </Label>
+                        <Input
+                          id="phone"
+                          name="phone"
+                          value={hotelForm.phone}
+                          onChange={handleHotelFormChange}
+                          className="col-span-3"
+                        />
+                      </div>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="email" className="text-right">
+                          E-posta
+                        </Label>
+                        <Input
+                          id="email"
+                          name="email"
+                          type="email"
+                          value={hotelForm.email}
+                          onChange={handleHotelFormChange}
+                          className="col-span-3"
+                        />
+                      </div>
+                      
+                      <Separator className="my-2" />
+                      
+                      <h4 className="font-medium text-gray-800 mb-1">Otel Yöneticisi Bilgileri</h4>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="adminUsername" className="text-right">
+                          Kullanıcı Adı
+                        </Label>
+                        <Input
+                          id="adminUsername"
+                          name="adminUsername"
+                          value={hotelForm.adminUsername}
+                          onChange={handleHotelFormChange}
+                          className="col-span-3"
+                        />
+                      </div>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="adminPassword" className="text-right">
+                          Şifre
+                        </Label>
+                        <Input
+                          id="adminPassword"
+                          name="adminPassword"
+                          type="password"
+                          value={hotelForm.adminPassword}
+                          onChange={handleHotelFormChange}
+                          className="col-span-3"
+                        />
+                      </div>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="adminFirstName" className="text-right">
+                          Adı
+                        </Label>
+                        <Input
+                          id="adminFirstName"
+                          name="adminFirstName"
+                          value={hotelForm.adminFirstName}
+                          onChange={handleHotelFormChange}
+                          className="col-span-3"
+                        />
+                      </div>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="adminLastName" className="text-right">
+                          Soyadı
+                        </Label>
+                        <Input
+                          id="adminLastName"
+                          name="adminLastName"
+                          value={hotelForm.adminLastName}
+                          onChange={handleHotelFormChange}
+                          className="col-span-3"
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button type="submit" disabled={createHotelMutation.isPending}>
+                        {createHotelMutation.isPending && (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        )}
+                        Kaydet
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </CardHeader>
+            <CardContent>
+              {hotelsLoading ? (
+                <div className="flex items-center justify-center h-40">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : hotels.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-3 px-4">ID</th>
+                        <th className="text-left py-3 px-4">İşletme Adı</th>
+                        <th className="text-left py-3 px-4">Adres</th>
+                        <th className="text-left py-3 px-4">Telefon</th>
+                        <th className="text-left py-3 px-4">E-posta</th>
+                        <th className="text-center py-3 px-4">İşlemler</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {hotels.map((hotel: any) => (
+                        <tr key={hotel.id} className="border-b hover:bg-gray-50">
+                          <td className="py-3 px-4">{hotel.id}</td>
+                          <td className="py-3 px-4">{hotel.name}</td>
+                          <td className="py-3 px-4">{hotel.address}</td>
+                          <td className="py-3 px-4">{hotel.phone}</td>
+                          <td className="py-3 px-4">{hotel.email}</td>
+                          <td className="py-3 px-4">
+                            <div className="flex justify-center space-x-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedHotel(hotel);
+                                  setIsEditHotelFormOpen(true);
+                                }}
+                              >
+                                <Pencil className="h-4 w-4 mr-1" />
+                                Düzenle
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="destructive"
+                                onClick={() => {
+                                  setSelectedHotel(hotel);
+                                  setIsDeleteHotelDialogOpen(true);
+                                }}
+                              >
+                                <Trash className="h-4 w-4 mr-1" />
+                                Sil
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-10">
+                  <p className="text-gray-500 mb-4">Henüz bir otel işletmesi kaydedilmemiş.</p>
+                  <Button 
+                    size="sm"
+                    onClick={() => setIsHotelFormOpen(true)}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    İlk Oteli Ekle
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          ) : (
+            <div className="p-8 text-center">
+              <AlertTriangle className="h-10 w-10 text-yellow-500 mx-auto mb-4" />
+              <h3 className="text-lg font-medium mb-2">Erişim Reddedildi</h3>
+              <p className="text-gray-500 mb-4">Bu bölümü görüntülemek için superadmin yetkisine sahip olmanız gerekmektedir.</p>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Staff Management Tab */}
+        <TabsContent value="staff">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0">
+              <CardTitle>Personel Yönetimi</CardTitle>
+              <Dialog open={isStaffFormOpen} onOpenChange={setIsStaffFormOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm">
+                    <UserPlus className="w-4 h-4 mr-2" />
+                    Yeni Personel Ekle
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Yeni Personel Ekle</DialogTitle>
+                    <DialogDescription>
+                      Yeni bir personel eklemek için aşağıdaki bilgileri doldurun.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={handleStaffFormSubmit}>
+                    <div className="grid gap-4 py-4">
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="username" className="text-right">
+                          Kullanıcı Adı
+                        </Label>
+                        <Input
+                          id="username"
+                          name="username"
+                          value={staffForm.username}
+                          onChange={handleStaffFormChange}
+                          className="col-span-3"
+                          required
+                        />
+                      </div>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="password" className="text-right">
+                          Şifre
+                        </Label>
+                        <Input
+                          id="password"
+                          name="password"
+                          type="password"
+                          value={staffForm.password}
+                          onChange={handleStaffFormChange}
+                          className="col-span-3"
+                          required
+                        />
+                      </div>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="firstName" className="text-right">
+                          Ad
+                        </Label>
+                        <Input
+                          id="firstName"
+                          name="firstName"
+                          value={staffForm.firstName}
+                          onChange={handleStaffFormChange}
+                          className="col-span-3"
+                        />
+                      </div>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="lastName" className="text-right">
+                          Soyad
+                        </Label>
+                        <Input
+                          id="lastName"
+                          name="lastName"
+                          value={staffForm.lastName}
+                          onChange={handleStaffFormChange}
+                          className="col-span-3"
+                        />
+                      </div>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="department" className="text-right">
+                          Departman
+                        </Label>
+                        <Select 
+                          value={staffForm.department} 
+                          onValueChange={(value) => setStaffForm(prev => ({ ...prev, department: value }))}
+                        >
+                          <SelectTrigger className="col-span-3">
+                            <SelectValue placeholder="Departman seçin" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {departments.map((dept) => (
+                              <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="telegramUsername" className="text-right">
+                          Telegram Kullanıcı Adı
+                        </Label>
+                        <Input
+                          id="telegramUsername"
+                          name="telegramUsername"
+                          value={staffForm.telegramUsername}
+                          onChange={handleStaffFormChange}
+                          className="col-span-3"
+                          placeholder="@kullaniciadi"
+                        />
+                      </div>
+                      {isAdmin && (
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor="role" className="text-right">
+                            Rol
+                          </Label>
+                          <Select 
+                            value={staffForm.role} 
+                            onValueChange={(value) => setStaffForm(prev => ({ ...prev, role: value }))}
+                          >
+                            <SelectTrigger className="col-span-3">
+                              <SelectValue placeholder="Rol seçin" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="staff">Personel</SelectItem>
+                              <SelectItem value="admin">Yönetici</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      )}
+                    </div>
+                    <DialogFooter>
+                      <Button type="submit" disabled={createStaffMutation.isPending}>
+                        {createStaffMutation.isPending && (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        )}
+                        Kaydet
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </CardHeader>
+            <CardContent>
+              {staffLoading ? (
+                <div className="flex items-center justify-center h-40">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : staff.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-3 px-4">ID</th>
+                        <th className="text-left py-3 px-4">Kullanıcı Adı</th>
+                        <th className="text-left py-3 px-4">Ad</th>
+                        <th className="text-left py-3 px-4">Soyad</th>
+                        <th className="text-left py-3 px-4">Departman</th>
+                        <th className="text-left py-3 px-4">Telegram</th>
+                        <th className="text-left py-3 px-4">Rol</th>
+                        {isAdmin && <th className="text-left py-3 px-4">İşlemler</th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {staff.map((user: any) => (
+                        <tr key={user.id} className="border-b hover:bg-gray-50">
+                          <td className="py-3 px-4">{user.id}</td>
+                          <td className="py-3 px-4">{user.username}</td>
+                          <td className="py-3 px-4">{user.firstName || '-'}</td>
+                          <td className="py-3 px-4">{user.lastName || '-'}</td>
+                          <td className="py-3 px-4">{user.department || '-'}</td>
+                          <td className="py-3 px-4">{user.telegramUsername || '-'}</td>
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                              user.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+                            }`}>
+                              {user.role === 'admin' ? 'Yönetici' : 'Personel'}
+                            </span>
+                          </td>
+                          {isAdmin && (
+                            <td className="py-3 px-4">
+                              <div className="flex space-x-2">
+                                <Dialog>
+                                  <DialogTrigger asChild>
+                                    <Button variant="outline" size="sm">
+                                      <UserCog className="w-4 h-4 mr-1" />
+                                      Düzenle
+                                    </Button>
+                                  </DialogTrigger>
+                                  <DialogContent>
+                                    <DialogHeader>
+                                      <DialogTitle>Personel Düzenle</DialogTitle>
+                                      <DialogDescription>
+                                        Personelin bilgilerini ve yetkilerini düzenleyin.
+                                      </DialogDescription>
+                                    </DialogHeader>
+                                    <form onSubmit={(e) => {
+                                      e.preventDefault();
+                                      const formData = new FormData(e.target as HTMLFormElement);
+                                      const userData = {
+                                        username: formData.get('username'),
+                                        department: formData.get('department'),
+                                        role: formData.get('role'),
+                                        telegramUsername: formData.get('telegramUsername'),
+                                        ...(formData.get('password') ? { password: formData.get('password') } : {})
+                                      };
+                                      
+                                      // API çağrısı
+                                      fetch(`/api/users/${user.id}`, {
+                                        method: 'PATCH',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify(userData)
+                                      })
+                                      .then(res => {
+                                        if (!res.ok) throw new Error('Kullanıcı güncellenemedi');
+                                        return res.json();
+                                      })
+                                      .then(() => {
+                                        toast({
+                                          title: "Personel güncellendi",
+                                          description: "Personel bilgileri başarıyla güncellendi.",
+                                        });
+                                        // Yeniden kullanıcı verilerini yükle
+                                        queryClient.invalidateQueries({ queryKey: ['/api/hotels', currentHotelId, 'users'] });
+                                      })
+                                      .catch(err => {
+                                        toast({
+                                          title: "Hata",
+                                          description: err.message,
+                                          variant: "destructive"
+                                        });
+                                      });
+                                    }}>
+                                      <div className="space-y-4 py-4">
+                                        <div className="grid grid-cols-4 items-center gap-4">
+                                          <Label htmlFor="edit-username" className="text-right">
+                                            Kullanıcı Adı
+                                          </Label>
+                                          <Input
+                                            id="edit-username"
+                                            name="username"
+                                            defaultValue={user.username}
+                                            className="col-span-3"
+                                          />
+                                        </div>
+                                        <div className="grid grid-cols-4 items-center gap-4">
+                                          <Label htmlFor="edit-password" className="text-right">
+                                            Yeni Şifre
+                                          </Label>
+                                          <Input
+                                            id="edit-password"
+                                            name="password"
+                                            type="password"
+                                            placeholder="Değiştirmek için yeni şifre girin"
+                                            className="col-span-3"
+                                          />
+                                        </div>
+                                        <div className="grid grid-cols-4 items-center gap-4">
+                                          <Label htmlFor="edit-department" className="text-right">
+                                            Departman
+                                          </Label>
+                                          <Select 
+                                            name="department"
+                                            defaultValue={user.department || ""}
+                                          >
+                                            <SelectTrigger className="col-span-3">
+                                              <SelectValue placeholder="Departman seçin" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              {departments.map((dept) => (
+                                                <SelectItem key={dept} value={dept}>{dept}</SelectItem>
+                                              ))}
+                                            </SelectContent>
+                                          </Select>
+                                        </div>
+                                        
+                                        <div className="grid grid-cols-4 items-center gap-4">
+                                          <Label htmlFor="edit-telegram" className="text-right">
+                                            Telegram Kullanıcı Adı
+                                          </Label>
+                                          <Input
+                                            id="edit-telegram"
+                                            name="telegramUsername"
+                                            defaultValue={user.telegramUsername || ""}
+                                            placeholder="@kullaniciadi"
+                                            className="col-span-3"
+                                          />
+                                        </div>
+                                        <div className="grid grid-cols-4 items-center gap-4">
+                                          <Label htmlFor="edit-role" className="text-right">
+                                            Rol
+                                          </Label>
+                                          <Select 
+                                            name="role"
+                                            defaultValue={user.role || "staff"}
+                                          >
+                                            <SelectTrigger className="col-span-3">
+                                              <SelectValue placeholder="Rol seçin" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                              <SelectItem value="staff">Personel</SelectItem>
+                                              <SelectItem value="admin">Yönetici</SelectItem>
+                                            </SelectContent>
+                                          </Select>
+                                        </div>
+                                      </div>
+                                      <DialogFooter>
+                                        <Button type="submit">Kaydet</Button>
+                                      </DialogFooter>
+                                    </form>
+                                  </DialogContent>
+                                </Dialog>
+                                
+                                <Button 
+                                  variant="destructive" 
+                                  size="sm"
+                                  onClick={() => {
+                                    if (confirm(`${user.username} kullanıcısını silmek istediğinize emin misiniz?`)) {
+                                      // Silme API çağrısı
+                                      fetch(`/api/users/${user.id}`, {
+                                        method: 'DELETE',
+                                      })
+                                      .then(res => {
+                                        if (!res.ok) throw new Error('Kullanıcı silinemedi');
+                                        return res.json();
+                                      })
+                                      .then(() => {
+                                        toast({
+                                          title: "Personel silindi",
+                                          description: `${user.username} personeli başarıyla silindi.`,
+                                        });
+                                        // Yeniden kullanıcı verilerini yükle
+                                        queryClient.invalidateQueries({ queryKey: ['/api/hotels', currentHotelId, 'users'] });
+                                      })
+                                      .catch(err => {
+                                        toast({
+                                          title: "Hata",
+                                          description: err.message,
+                                          variant: "destructive"
+                                        });
+                                      });
+                                    }
+                                  }}
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-10">
+                  <p className="text-gray-500 mb-4">Henüz bir personel kaydedilmemiş.</p>
+                  <Button 
+                    size="sm"
+                    onClick={() => setIsStaffFormOpen(true)}
+                  >
+                    <UserPlus className="w-4 h-4 mr-2" />
+                    İlk Personeli Ekle
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        {/* Badges Tab */}
+        <TabsContent value="badges">
+          {currentUser ? (
+            isAdmin ? (
+              <BadgeManagement 
+                hotelId={selectedHotelForStaff || currentUser.hotelId || 0}
+                currentUserId={currentUser.id || 0}
+                userRole={currentUser.role || 'staff'}
+              />
+            ) : (
+              <Badges 
+                userId={currentUser.id || 0}
+                userName={currentUser.firstName ? `${currentUser.firstName} ${currentUser.lastName}` : currentUser.username || ''}
+                userRole={currentUser.role || 'staff'}
+              />
+            )
+          ) : (
+            <Card>
+              <CardContent className="py-10 text-center">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+                <p>Kullanıcı bilgileri yükleniyor...</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
+      
+      {/* Otel düzenleme dialog */}
+      <Dialog open={isEditHotelFormOpen} onOpenChange={setIsEditHotelFormOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Otel Düzenle</DialogTitle>
+            <DialogDescription>
+              Otel bilgilerini güncelleyin.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleEditHotelFormSubmit}>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="name" className="text-right">
+                  İşletme Adı
+                </Label>
+                <Input
+                  id="name"
+                  name="name"
+                  defaultValue={selectedHotel?.name || ''}
+                  className="col-span-3"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="address" className="text-right">
+                  Adres
+                </Label>
+                <Input
+                  id="address"
+                  name="address"
+                  defaultValue={selectedHotel?.address || ''}
+                  className="col-span-3"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="phone" className="text-right">
+                  Telefon
+                </Label>
+                <Input
+                  id="phone"
+                  name="phone"
+                  defaultValue={selectedHotel?.phone || ''}
+                  className="col-span-3"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="email" className="text-right">
+                  E-posta
+                </Label>
+                <Input
+                  id="email"
+                  name="email"
+                  defaultValue={selectedHotel?.email || ''}
+                  className="col-span-3"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={updateHotelMutation.isPending}>
+                {updateHotelMutation.isPending && (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                )}
+                Güncelle
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Otel silme onay dialog */}
+      <AlertDialog open={isDeleteHotelDialogOpen} onOpenChange={setIsDeleteHotelDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Oteli Silmeyi Onaylayın</AlertDialogTitle>
+            <AlertDialogDescription>
+              <p className="mb-2">
+                <strong>{selectedHotel?.name}</strong> otelini silmek istediğinizden emin misiniz? 
+              </p>
+              <p className="mb-2">
+                Bu işlem geri alınamaz ve bu otele bağlı tüm kullanıcılar ve istekler de etkilenecektir.
+              </p>
+              <p className="text-red-500 font-semibold">
+                Otel silindikten sonra bu işlem geri alınamaz!
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>İptal</AlertDialogCancel>
+            <AlertDialogAction 
+              className="bg-red-600 hover:bg-red-700"
+              onClick={handleDeleteHotel}
+              disabled={deleteHotelMutation.isPending}
+            >
+              {deleteHotelMutation.isPending && (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              )}
+              Oteli Sil
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
