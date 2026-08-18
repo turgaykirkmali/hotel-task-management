@@ -3,7 +3,7 @@ services:
     name: hotel-task-management
     runtime: node
     plan: free
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci && npm run db:push && npm run build
     startCommand: npm start
     healthCheckPath: /healthz
     envVars:
@@ -17,6 +17,18 @@ services:
         value: true
       - key: DB_POOL_MAX
         value: 5
+      - key: SUPERADMIN_USERNAME
+        sync: false
+      - key: SUPERADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: BOOTSTRAP_RESET_PASSWORDS
+        value: "false"
+      - key: BOOTSTRAP_HOTEL_NAME
+        value: "Hyatt Place Istanbul Esenyurt"
       - key: TELEGRAM_BOT_TOKEN
         sync: false
       - key: SENDGRID_API_KEY

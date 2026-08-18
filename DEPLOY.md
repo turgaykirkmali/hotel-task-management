@@ -65,3 +65,20 @@ npm start
 - `DATABASE_SSL`: `true` for hosted PostgreSQL, `false` for a local non-SSL PostgreSQL
 - `TELEGRAM_BOT_TOKEN`: optional
 - `SENDGRID_API_KEY`: optional
+
+
+## Render first deployment (v4)
+
+Required Environment Variables on the Web Service:
+- `DATABASE_URL`
+- `SESSION_SECRET`
+- `SUPERADMIN_USERNAME`
+- `SUPERADMIN_PASSWORD`
+- `ADMIN_USERNAME`
+- `ADMIN_PASSWORD`
+
+Optional:
+- `BOOTSTRAP_RESET_PASSWORDS=true` for a one-time password reset
+- `BOOTSTRAP_HOTEL_NAME`
+
+The build command must run `npm ci && npm run db:push && npm run build`. The application now fails fast if bootstrap credentials are missing instead of silently skipping user creation.
