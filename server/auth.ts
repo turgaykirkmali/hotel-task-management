@@ -18,7 +18,6 @@ const scryptAsync = promisify(scrypt);
 export async function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
   const buf = (await scryptAsync(password, salt, 64)) as Buffer;
-  console.log("Oluşturulan şifre hash:", `${buf.toString("hex")}.${salt}`);
   return `${buf.toString("hex")}.${salt}`;
 }
 
@@ -39,6 +38,7 @@ async function comparePasswords(supplied: string, stored: string) {
   
   const hashedBuf = Buffer.from(hashed, "hex");
   const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
+  if (hashedBuf.length !== suppliedBuf.length) return false;
   return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
@@ -101,54 +101,47 @@ export function setupAuth(app: Express) {
 
   app.post("/api/register", async (req, res, next) => {
     try {
+      const currentUser = req.user;
+      if (!currentUser || (currentUser.role !== "admin" && currentUser.role !== "superadmin")) {
+        return res.status(403).json({ message: "Yeni kullanıcı oluşturmak için yönetici yetkisi gereklidir" });
+      }
+
+      const requestedRole = req.body.role || "staff";
+      if (!(["staff", "admin", "superadmin"] as const).includes(requestedRole)) {
+        return res.status(400).json({ message: "Geçersiz kullanıcı rolü" });
+      }
+
+      if (requestedRole === "superadmin" && currentUser.role !== "superadmin") {
+        return res.status(403).json({ message: "Superadmin oluşturma yetkiniz bulunmuyor" });
+      }
+
+      if (requestedRole === "admin" && currentUser.role !== "superadmin") {
+        return res.status(403).json({ message: "Admin oluşturmak için superadmin yetkisi gereklidir" });
+      }
+
+      if (!req.body.username || !req.body.password) {
+        return res.status(400).json({ message: "Kullanıcı adı ve şifre gereklidir" });
+      }
+
       const existingUser = await storage.getUserByUsername(req.body.username);
       if (existingUser) {
         return res.status(400).json({ message: "Kullanıcı adı zaten var" });
       }
 
-      // Kullanıcı rolü kontrolü
-      const requestedRole = req.body.role || "staff";
-      let roleToUse = requestedRole;
-
-      // Kullanıcı rolünü kontrol et
-      if (req.isAuthenticated() && req.user) {
-        console.log("Yeni kullanıcı oluşturuluyor, oluşturan kullanıcının rolü:", req.user.role);
-        
-        // Eğer admin oluşturuluyorsa ve rol superadmin değilse, yetki kontrolü yap
-        if (requestedRole === "admin" && req.user.role !== "superadmin") {
-          console.log("Admin oluşturmak için superadmin rolü gereklidir");
-          // Rol "staff" olarak değiştirilir
-          roleToUse = "staff";
-        }
-      } else if (requestedRole === "admin" || requestedRole === "superadmin") {
-        // Kimlik doğrulaması yapılmamış ve admin/superadmin rolü isteği
-        // İlk kullanıcı oluşturma veya api çağrısı (hotel oluşturma sırasında)
-        console.log("Kimlik doğrulaması olmadan admin oluşturma isteği");
-        roleToUse = "admin"; // İlk kurulum veya hotel oluşturma sırasında izin ver
-      }
-
+      const roleToUse = requestedRole;
+      const hotelId = currentUser.role === "admin" ? currentUser.hotelId : req.body.hotelId;
       const user = await storage.createUser({
         ...req.body,
         password: await hashPassword(req.body.password),
         role: roleToUse,
+        hotelId: roleToUse === "superadmin" ? null : (hotelId ?? null),
       });
 
-      console.log("Kullanıcı oluşturuldu:", user.username, "Rol:", user.role);
+      const userWithoutPassword = { ...user } as any;
+      delete userWithoutPassword.password;
 
-      // Eğer bu bir API tarafından yapılan bir çağrıysa, giriş yapmadan önce kullanıcıyı döndür
-      if (!req.headers.accept || !req.headers.accept.includes('text/html')) {
-        const userWithoutPassword = { ...user } as any;
-        delete userWithoutPassword.password;
-        return res.status(201).json(userWithoutPassword);
-      }
-
-      req.login(user, (err: Error) => {
-        if (err) return next(err);
-        // Şifreyi geri döndürmeden önce kaldır
-        const userWithoutPassword = { ...user } as any;
-        delete userWithoutPassword.password;
-        res.status(201).json(userWithoutPassword);
-      });
+      // Registration is an administrative action; do not automatically sign the creator in as the new user.
+      return res.status(201).json(userWithoutPassword);
     } catch (error) {
       console.error("Kayıt hatası:", error);
       res.status(500).json({ message: "Kayıt sırasında bir hata oluştu" });

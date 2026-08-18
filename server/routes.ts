@@ -36,15 +36,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-  // Telegram kullanıcı eşleştirme endpoint (test için)
+  // Telegram kullanıcı eşleştirme endpoint
   app.post("/api/telegram-connect", async (req: Request, res: Response) => {
     try {
-      // Test için yetki kontrolünü devre dışı bırakıyoruz
-      // Admin ve superadmin kontrolü
-      // const currentUser = req.user;
-      // if (!currentUser || (currentUser.role !== "admin" && currentUser.role !== "superadmin")) {
-      //   return res.status(403).json({ message: "Bu işlem için yetkiniz bulunmuyor" });
-      // }
+      const currentUser = req.user;
+      if (!currentUser || (currentUser.role !== "admin" && currentUser.role !== "superadmin")) {
+        return res.status(403).json({ message: "Bu işlem için yetkiniz bulunmuyor" });
+      }
       
       const { userId, chatId, telegramUsername } = req.body;
       
@@ -65,6 +63,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // TEST: Telegram bildirim gönderme endpoint (sadece geliştirme için)
   app.post("/api/test-telegram-notification", async (req: Request, res: Response) => {
     try {
+      const currentUser = req.user;
+      if (process.env.NODE_ENV === "production" || !currentUser || (currentUser.role !== "admin" && currentUser.role !== "superadmin")) {
+        return res.status(404).json({ message: "Not found" });
+      }
+
       const { telegramUsername, roomNumber, requestDetails, department, requestId } = req.body;
       
       if (!telegramUsername || !roomNumber || !requestDetails || !department) {

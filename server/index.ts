@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { configureSendGrid } from "./notifications";
 import { initializeTelegram } from "./telegram";
+import { bootstrapUsers } from "./bootstrap";
 
 const app = express();
 app.use(express.json());
@@ -72,6 +73,16 @@ app.use((req, res, next) => {
   });
 
   const server = await registerRoutes(app);
+
+  // Create initial privileged users on a fresh deployment.
+  // This runs after the schema is available and before the server starts accepting traffic.
+  console.log("Bootstrap: invoking privileged-user initialization...");
+  try {
+    await bootstrapUsers();
+  } catch (error) {
+    console.error("Bootstrap kullanıcı kurulumu başarısız:", error);
+    throw error;
+  }
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
