@@ -1,0 +1,62 @@
+Harika bir seçim yaptın! 66. fikir olan "ClosetAR" (Sanal Gardırop ve Kıyafet Kombinasyon Danışmanı) gerçekten hem geniş kullanıcı kitlesine hitap ediyor hem de günlük hayatta çözülemeyen bir probleme çözüm sunuyor. Gel, bu fikri birlikte somut bir iş planına dönüştürelim.
+
+✅ Fikrin Özeti: "ClosetAR" – Akıllı Gardırop ve Kombin Danışmanı
+Kullanıcılar kıyafetlerini fotoğraflayıp uygulamaya yükler. AI, bu kıyafetleri kategorize eder ve kombin önerileri sunar.
+Ayrıca hangi parçaların ne kadar süredir giyilmediğini gösterir, renk uyumu önerileri verir ve “bugün ne giysem?” sorusuna anında yanıt verir.
+
+🎯 Hedef Kitle
+16–45 yaş arası şehirli kullanıcılar
+
+Moda ile ilgilenen gençler
+
+Gardırobunu verimli kullanmak isteyen minimalistler
+
+Online alışveriş yapanlar
+
+Influencer'lar / içerik üreticiler
+
+💡 Temel Özellikler (MVP)
+1. Kıyafet Ekleme
+Kullanıcı, kıyafetlerini telefon kamerasıyla çeker.
+
+AI arka planı siler, giyim türünü (etek, gömlek, ayakkabı vs.) otomatik tanır.
+
+2. Akıllı Kategorilendirme
+Giysi türü, renk, desen, mevsim ve stil bilgilerine göre etiketlenir.
+
+3. Kombin Önerileri
+Girdiğin hava durumuna, etkinliğe ve tarzına göre kıyafet kombinleri önerir.
+
+4. Giyilme Takibi
+Her kıyafet için “son giyilme tarihi” tutulur. Uzun süredir giyilmeyen parçalar bildirilir.
+
+5. Dolapta Eksik Önerisi
+"Beyaz tişört eksik, çok kombinlenebilir." gibi akıllı öneriler sunar.
+
+🛠️ Teknoloji Altyapısı
+Frontend: Flutter (iOS + Android tek geliştirme)
+
+Backend: Firebase ya da Node.js + MongoDB
+
+AI / Görüntü İşleme: TensorFlow Lite veya Google ML Kit (giysi tanıma, arka plan silme)
+
+Cloud: Google Cloud veya AWS (resim saklama, analiz)
+
+💰 Gelir Modelleri
+1. Freemium Model
+Ücretsiz kullanımda sınırlı kombin önerisi / 20 kıyafet limiti
+
+Premium üyelik ile sınırsız kullanım, özel öneriler, reklam kaldırma
+
+2. Affiliate Marketing
+Kullanıcının dolabına uygun kıyafet eksikse, markalardan link verilerek satış başına komisyon alınabilir.
+
+3. Kişisel Stil Danışmanlığı (Pro Seviye)
+Gerçek stil danışmanlarıyla eşleşme (freelance hizmet modeli)
+
+🧠 Rakip Avantajı
+Çoğu gardırop uygulaması manuel işlem gerektirir. ClosetAR, yapay zekâ ile süreci otomatikleştirerek fark yaratır.
+
+Kombin önerilerinde sadece renk değil, etkinlik türü, hava durumu, kişisel kullanım alışkanlığı gibi unsurlar da kullanılır.
+
+Veriye dayalı sadeleşme sağlar: “Son 90 günde giymediğin 17 parça var.”

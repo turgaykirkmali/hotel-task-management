@@ -1,0 +1,601 @@
+import { useState, useEffect } from 'react';
+import { Bell, ClipboardList, FileText, Home, PieChart, Settings, User } from 'lucide-react';
+
+// Örnek veri
+const initialRequests = [
+  { id: 1, roomNumber: "101", request: "Ekstra havlu istendi", department: "Kat Hizmetleri", status: "beklemede", createdAt: "2025-04-19T14:30:00", completedAt: null, assignedTo: "Ayşe Yılmaz" },
+  { id: 2, roomNumber: "205", request: "Minibar doldurulması", department: "Kat Hizmetleri", status: "tamamlandı", createdAt: "2025-04-19T10:15:00", completedAt: "2025-04-19T11:30:00", assignedTo: "Mehmet Kaya" },
+  { id: 3, roomNumber: "310", request: "Klima arızası", department: "Teknik Servis", status: "işlemde", createdAt: "2025-04-19T09:45:00", completedAt: null, assignedTo: "Ali Demir" },
+];
+
+const departments = ["Kat Hizmetleri", "Resepsiyon", "Teknik Servis", "Restoran", "Güvenlik"];
+
+export default function HotelRequestSystem() {
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [requests, setRequests] = useState(initialRequests);
+  const [newRequest, setNewRequest] = useState({ roomNumber: "", request: "", department: "Kat Hizmetleri" });
+  const [notifications, setNotifications] = useState([]);
+  const [reportType, setReportType] = useState("daily");
+  const [currentUser] = useState("Admin");
+  const [filteredRequests, setFilteredRequests] = useState([]);
+  const [filterStatus, setFilterStatus] = useState("all");
+
+  // Bildirimleri kontrol et
+  useEffect(() => {
+    const pendingRequests = requests.filter(req => req.status !== "tamamlandı");
+    setNotifications(pendingRequests);
+    
+    // Filtre uygula
+    applyFilters();
+  }, [requests, filterStatus]);
+
+  // Filtreleme fonksiyonu
+  const applyFilters = () => {
+    let filtered = [...requests];
+    
+    if (filterStatus !== "all") {
+      filtered = filtered.filter(req => req.status === filterStatus);
+    }
+    
+    // Son eklenen üstte olacak şekilde sırala
+    filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    
+    setFilteredRequests(filtered);
+  };
+
+  // Yeni istek ekleme
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    const currentDate = new Date().toISOString();
+    const newId = requests.length > 0 ? Math.max(...requests.map(r => r.id)) + 1 : 1;
+    
+    const requestToAdd = {
+      id: newId,
+      ...newRequest,
+      status: "beklemede",
+      createdAt: currentDate,
+      completedAt: null,
+      assignedTo: getDepartmentEmployee(newRequest.department)
+    };
+    
+    setRequests([...requests, requestToAdd]);
+    setNewRequest({ roomNumber: "", request: "", department: "Kat Hizmetleri" });
+    
+    // Bildirim
+    alert(`İstek oluşturuldu ve ${requestToAdd.assignedTo} personeline atandı!`);
+  };
+  
+  // Departmana göre rastgele personel atama
+  const getDepartmentEmployee = (department) => {
+    const employees = {
+      "Kat Hizmetleri": ["Ayşe Yılmaz", "Fatma Şahin", "Zeynep Kara"],
+      "Resepsiyon": ["Can Özdemir", "Elif Korkmaz"],
+      "Teknik Servis": ["Ali Demir", "Murat Bakır"],
+      "Restoran": ["Deniz Yıldız", "Selin Aydın"],
+      "Güvenlik": ["Kemal Yılmaz", "Okan Demir"]
+    };
+    
+    const deptEmployees = employees[department] || ["Atanmadı"];
+    const randomIndex = Math.floor(Math.random() * deptEmployees.length);
+    return deptEmployees[randomIndex];
+  };
+  
+  // İstek durumunu güncelleme
+  const updateRequestStatus = (id, newStatus) => {
+    const updatedRequests = requests.map(req => {
+      if (req.id === id) {
+        return {
+          ...req,
+          status: newStatus,
+          completedAt: newStatus === "tamamlandı" ? new Date().toISOString() : req.completedAt
+        };
+      }
+      return req;
+    });
+    
+    setRequests(updatedRequests);
+    
+    if (newStatus === "tamamlandı") {
+      alert(`İstek #${id} tamamlandı olarak işaretlendi!`);
+    }
+  };
+  
+  // Rapor verilerini hazırlama
+  const getReportData = () => {
+    const now = new Date();
+    let filteredData = [];
+    
+    if (reportType === "daily") {
+      // Günlük rapor - bugün
+      filteredData = requests.filter(req => {
+        const createdDate = new Date(req.createdAt);
+        return createdDate.toDateString() === now.toDateString();
+      });
+    } else if (reportType === "weekly") {
+      // Haftalık rapor - son 7 gün
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      
+      filteredData = requests.filter(req => {
+        const createdDate = new Date(req.createdAt);
+        return createdDate >= weekAgo;
+      });
+    } else if (reportType === "monthly") {
+      // Aylık rapor - bu ay
+      filteredData = requests.filter(req => {
+        const createdDate = new Date(req.createdAt);
+        return createdDate.getMonth() === now.getMonth() && 
+               createdDate.getFullYear() === now.getFullYear();
+      });
+    }
+    
+    return filteredData;
+  };
+  
+  // İstatistikler
+  const calculateStatistics = (data) => {
+    const stats = {
+      total: data.length,
+      completed: data.filter(req => req.status === "tamamlandı").length,
+      pending: data.filter(req => req.status === "beklemede").length,
+      inProgress: data.filter(req => req.status === "işlemde").length,
+      byDepartment: {}
+    };
+    
+    departments.forEach(dept => {
+      const deptRequests = data.filter(req => req.department === dept);
+      stats.byDepartment[dept] = {
+        total: deptRequests.length,
+        completed: deptRequests.filter(req => req.status === "tamamlandı").length
+      };
+    });
+    
+    return stats;
+  };
+  
+  // Tarih formatı
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleString('tr-TR');
+  };
+
+  // Dashboard içeriği
+  const renderDashboard = () => (
+    <div className="p-6">
+      <h2 className="text-lg font-semibold mb-4">Gösterge Paneli</h2>
+      
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="bg-white p-4 rounded-lg shadow-md">
+          <h3 className="text-gray-500 mb-2">Toplam İstek</h3>
+          <p className="text-2xl font-bold">{requests.length}</p>
+        </div>
+        <div className="bg-white p-4 rounded-lg shadow-md">
+          <h3 className="text-gray-500 mb-2">Bekleyen İstekler</h3>
+          <p className="text-2xl font-bold text-yellow-500">
+            {requests.filter(r => r.status === "beklemede").length}
+          </p>
+        </div>
+        <div className="bg-white p-4 rounded-lg shadow-md">
+          <h3 className="text-gray-500 mb-2">Tamamlanan İstekler</h3>
+          <p className="text-2xl font-bold text-green-500">
+            {requests.filter(r => r.status === "tamamlandı").length}
+          </p>
+        </div>
+      </div>
+      
+      <div className="bg-white p-4 rounded-lg shadow-md">
+        <h3 className="font-semibold mb-4">Son İstekler</h3>
+        <table className="w-full">
+          <thead>
+            <tr className="border-b">
+              <th className="text-left py-2">Oda</th>
+              <th className="text-left py-2">İstek</th>
+              <th className="text-left py-2">Departman</th>
+              <th className="text-left py-2">Durum</th>
+              <th className="text-left py-2">Tarih</th>
+            </tr>
+          </thead>
+          <tbody>
+            {requests.slice(-5).reverse().map(request => (
+              <tr key={request.id} className="border-b">
+                <td className="py-2">{request.roomNumber}</td>
+                <td className="py-2">{request.request}</td>
+                <td className="py-2">{request.department}</td>
+                <td className="py-2">
+                  <span className={`px-2 py-1 rounded-full text-xs ${
+                    request.status === "tamamlandı" ? "bg-green-100 text-green-800" :
+                    request.status === "beklemede" ? "bg-yellow-100 text-yellow-800" :
+                    "bg-blue-100 text-blue-800"
+                  }`}>
+                    {request.status}
+                  </span>
+                </td>
+                <td className="py-2">{formatDate(request.createdAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  // İstek listesi içeriği
+  const renderRequestsList = () => (
+    <div className="p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-lg font-semibold">İstek Listesi</h2>
+        <div className="flex">
+          <select 
+            className="border rounded px-3 py-2 mr-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={filterStatus}
+            onChange={e => setFilterStatus(e.target.value)}
+          >
+            <option value="all">Tüm İstekler</option>
+            <option value="beklemede">Beklemede</option>
+            <option value="işlemde">İşlemde</option>
+            <option value="tamamlandı">Tamamlandı</option>
+          </select>
+        </div>
+      </div>
+      
+      <div className="bg-white rounded-lg shadow-md overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Oda</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">İstek</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Departman</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Atanan</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Durum</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tarih</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">İşlem</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-200">
+            {filteredRequests.map(request => (
+              <tr key={request.id} className={request.status === "beklemede" ? "bg-yellow-50" : ""}>
+                <td className="px-4 py-3 whitespace-nowrap">{request.id}</td>
+                <td className="px-4 py-3 whitespace-nowrap">{request.roomNumber}</td>
+                <td className="px-4 py-3">{request.request}</td>
+                <td className="px-4 py-3">{request.department}</td>
+                <td className="px-4 py-3">{request.assignedTo}</td>
+                <td className="px-4 py-3">
+                  <span className={`px-2 py-1 rounded-full text-xs ${
+                    request.status === "tamamlandı" ? "bg-green-100 text-green-800" :
+                    request.status === "beklemede" ? "bg-yellow-100 text-yellow-800" :
+                    "bg-blue-100 text-blue-800"
+                  } ${(request.status === "beklemede" || request.status === "işlemde") ? "animate-pulse" : ""}`}>
+                    {request.status}
+                  </span>
+                </td>
+                <td className="px-4 py-3 whitespace-nowrap">{formatDate(request.createdAt)}</td>
+                <td className="px-4 py-3 whitespace-nowrap">
+                  {request.status !== "tamamlandı" && (
+                    <div className="flex space-x-2">
+                      {request.status === "beklemede" && (
+                        <button 
+                          className="text-xs bg-blue-500 text-white px-2 py-1 rounded"
+                          onClick={() => updateRequestStatus(request.id, "işlemde")}
+                        >
+                          İşleme Al
+                        </button>
+                      )}
+                      <button 
+                        className="text-xs bg-green-500 text-white px-2 py-1 rounded"
+                        onClick={() => updateRequestStatus(request.id, "tamamlandı")}
+                      >
+                        Tamamla
+                      </button>
+                    </div>
+                  )}
+                  {request.status === "tamamlandı" && (
+                    <span className="text-xs text-gray-500">
+                      {request.completedAt ? formatDate(request.completedAt) : '-'}
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  // Yeni istek formu
+  const renderNewRequestForm = () => (
+    <div className="p-6">
+      <h2 className="text-lg font-semibold mb-6">Yeni İstek Oluştur</h2>
+      
+      <div className="bg-white p-6 rounded-lg shadow-md max-w-2xl">
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label className="block text-gray-700 mb-2" htmlFor="roomNumber">
+              Oda Numarası
+            </label>
+            <input
+              type="text"
+              id="roomNumber"
+              className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={newRequest.roomNumber}
+              onChange={e => setNewRequest({...newRequest, roomNumber: e.target.value})}
+              required
+            />
+          </div>
+          
+          <div className="mb-4">
+            <label className="block text-gray-700 mb-2" htmlFor="department">
+              Departman
+            </label>
+            <select
+              id="department"
+              className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={newRequest.department}
+              onChange={e => setNewRequest({...newRequest, department: e.target.value})}
+              required
+            >
+              {departments.map(dept => (
+                <option key={dept} value={dept}>{dept}</option>
+              ))}
+            </select>
+          </div>
+          
+          <div className="mb-6">
+            <label className="block text-gray-700 mb-2" htmlFor="request">
+              İstek Detayı
+            </label>
+            <textarea
+              id="request"
+              className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 h-32"
+              value={newRequest.request}
+              onChange={e => setNewRequest({...newRequest, request: e.target.value})}
+              required
+            ></textarea>
+          </div>
+          
+          <button 
+            type="submit" 
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            İstek Oluştur
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+
+  // Raporlar bölümü
+  const renderReports = () => {
+    const reportData = getReportData();
+    const stats = calculateStatistics(reportData);
+    
+    return (
+      <div className="p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-lg font-semibold">Raporlar</h2>
+          <div className="flex">
+            <select 
+              className="border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={reportType}
+              onChange={e => setReportType(e.target.value)}
+            >
+              <option value="daily">Günlük Rapor</option>
+              <option value="weekly">Haftalık Rapor</option>
+              <option value="monthly">Aylık Rapor</option>
+            </select>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-4 gap-4 mb-6">
+          <div className="bg-white p-4 rounded-lg shadow-md">
+            <h3 className="text-gray-500 mb-2">Toplam İstek</h3>
+            <p className="text-2xl font-bold">{stats.total}</p>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow-md">
+            <h3 className="text-gray-500 mb-2">Tamamlanan</h3>
+            <p className="text-2xl font-bold text-green-500">{stats.completed}</p>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow-md">
+            <h3 className="text-gray-500 mb-2">Bekleyen</h3>
+            <p className="text-2xl font-bold text-yellow-500">{stats.pending}</p>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow-md">
+            <h3 className="text-gray-500 mb-2">İşlemde</h3>
+            <p className="text-2xl font-bold text-blue-500">{stats.inProgress}</p>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-2 gap-6 mb-6">
+          <div className="bg-white p-4 rounded-lg shadow-md">
+            <h3 className="font-semibold mb-4">Departman Bazında İstekler</h3>
+            <table className="w-full">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-2">Departman</th>
+                  <th className="text-left py-2">Toplam</th>
+                  <th className="text-left py-2">Tamamlanan</th>
+                  <th className="text-left py-2">Oran</th>
+                </tr>
+              </thead>
+              <tbody>
+                {departments.map(dept => (
+                  <tr key={dept} className="border-b">
+                    <td className="py-2">{dept}</td>
+                    <td className="py-2">{stats.byDepartment[dept]?.total || 0}</td>
+                    <td className="py-2">{stats.byDepartment[dept]?.completed || 0}</td>
+                    <td className="py-2">
+                      {stats.byDepartment[dept]?.total > 0 
+                        ? `${Math.round((stats.byDepartment[dept]?.completed / stats.byDepartment[dept]?.total) * 100)}%` 
+                        : '0%'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          
+          <div className="bg-white p-4 rounded-lg shadow-md">
+            <h3 className="font-semibold mb-4">Performans Özeti</h3>
+            <div className="space-y-4">
+              <div>
+                <div className="flex justify-between mb-1">
+                  <span>Tamamlanma Oranı</span>
+                  <span>{stats.total > 0 ? `${Math.round((stats.completed / stats.total) * 100)}%` : '0%'}</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-green-500 h-2 rounded-full"
+                    style={{ width: stats.total > 0 ? `${Math.round((stats.completed / stats.total) * 100)}%` : '0%' }}
+                  ></div>
+                </div>
+              </div>
+              
+              <div>
+                <div className="flex justify-between mb-1">
+                  <span>Bekleyen İşler</span>
+                  <span>{stats.total > 0 ? `${Math.round((stats.pending / stats.total) * 100)}%` : '0%'}</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-yellow-500 h-2 rounded-full"
+                    style={{ width: stats.total > 0 ? `${Math.round((stats.pending / stats.total) * 100)}%` : '0%' }}
+                  ></div>
+                </div>
+              </div>
+              
+              <div>
+                <div className="flex justify-between mb-1">
+                  <span>İşlemdeki İstekler</span>
+                  <span>{stats.total > 0 ? `${Math.round((stats.inProgress / stats.total) * 100)}%` : '0%'}</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-blue-500 h-2 rounded-full"
+                    style={{ width: stats.total > 0 ? `${Math.round((stats.inProgress / stats.total) * 100)}%` : '0%' }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div className="bg-white p-4 rounded-lg shadow-md">
+          <h3 className="font-semibold mb-4">
+            {reportType === "daily" ? "Günlük" : reportType === "weekly" ? "Haftalık" : "Aylık"} İstek Detayları
+          </h3>
+          <table className="w-full">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left py-2">ID</th>
+                <th className="text-left py-2">Oda</th>
+                <th className="text-left py-2">İstek</th>
+                <th className="text-left py-2">Departman</th>
+                <th className="text-left py-2">Durum</th>
+                <th className="text-left py-2">Oluşturulma</th>
+                <th className="text-left py-2">Tamamlanma</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reportData.length === 0 ? (
+                <tr>
+                  <td colSpan="7" className="py-4 text-center text-gray-500">
+                    Bu dönem için kayıt bulunamadı
+                  </td>
+                </tr>
+              ) : (
+                reportData.map(request => (
+                  <tr key={request.id} className="border-b">
+                    <td className="py-2">{request.id}</td>
+                    <td className="py-2">{request.roomNumber}</td>
+                    <td className="py-2">{request.request}</td>
+                    <td className="py-2">{request.department}</td>
+                    <td className="py-2">
+                      <span className={`px-2 py-1 rounded-full text-xs ${
+                        request.status === "tamamlandı" ? "bg-green-100 text-green-800" :
+                        request.status === "beklemede" ? "bg-yellow-100 text-yellow-800" :
+                        "bg-blue-100 text-blue-800"
+                      }`}>
+                        {request.status}
+                      </span>
+                    </td>
+                    <td className="py-2">{formatDate(request.createdAt)}</td>
+                    <td className="py-2">{request.completedAt ? formatDate(request.completedAt) : '-'}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
+  // Ayarlar bölümü
+  const renderSettings = () => (
+    <div className="p-6">
+      <h2 className="text-lg font-semibold mb-6">Ayarlar</h2>
+      <div className="bg-white p-6 rounded-lg shadow-md">
+        <p className="text-gray-600">Sistem ayarları burada gösterilecektir.</p>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="flex h-screen bg-gray-100">
+      {/* Sol Menü */}
+      <div className="w-16 bg-blue-800 text-white flex flex-col items-center pt-6">
+        <div className="mb-8 cursor-pointer" onClick={() => setActiveTab("dashboard")}>
+          <Home size={24} className={activeTab === "dashboard" ? "text-white" : "text-blue-300"} />
+        </div>
+        <div className="mb-8 cursor-pointer relative" onClick={() => setActiveTab("requests")}>
+          <ClipboardList size={24} className={activeTab === "requests" ? "text-white" : "text-blue-300"} />
+          {notifications.length > 0 && (
+            <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center animate-pulse">
+              {notifications.length}
+            </span>
+          )}
+        </div>
+        <div className="mb-8 cursor-pointer" onClick={() => setActiveTab("newRequest")}>
+          <FileText size={24} className={activeTab === "newRequest" ? "text-white" : "text-blue-300"} />
+        </div>
+        <div className="mb-8 cursor-pointer" onClick={() => setActiveTab("reports")}>
+          <PieChart size={24} className={activeTab === "reports" ? "text-white" : "text-blue-300"} />
+        </div>
+        <div className="mb-8 cursor-pointer" onClick={() => setActiveTab("settings")}>
+          <Settings size={24} className={activeTab === "settings" ? "text-white" : "text-blue-300"} />
+        </div>
+        <div className="mt-auto mb-6 cursor-pointer">
+          <User size={24} className="text-blue-300" />
+        </div>
+      </div>
+      
+      {/* Ana içerik */}
+      <div className="flex-1 overflow-y-auto">
+        {/* Üst başlık */}
+        <div className="bg-white p-4 shadow-md flex justify-between items-center">
+          <h1 className="text-xl font-bold text-gray-800">Otel İstek Yönetim Sistemi</h1>
+          <div className="flex items-center">
+            <div className="relative mr-4">
+              <Bell size={20} className="text-gray-600" />
+              {notifications.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
+                  {notifications.length}
+                </span>
+              )}
+            </div>
+            <span className="text-gray-600">{currentUser}</span>
+          </div>
+        </div>
+        
+        {/* Aktif sekmenin içeriği */}
+        {activeTab === "dashboard" && renderDashboard()}
+        {activeTab === "requests" && renderRequestsList()}
+        {activeTab === "newRequest" && renderNewRequestForm()}
+        {activeTab === "reports" && renderReports()}
+        {activeTab === "settings" && renderSettings()}
+      </div>
+    </div>
+  );
+}

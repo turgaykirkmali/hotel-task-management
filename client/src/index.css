@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Bildirim CSS Animasyonları */
+@keyframes highlight-pulse {
+  0% {
+    background-color: rgba(236, 253, 245, 0.6);
+    box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.3);
+  }
+  50% {
+    background-color: rgba(209, 250, 229, 0.8);
+    box-shadow: 0 0 0 8px rgba(52, 211, 153, 0.5);
+  }
+  100% {
+    background-color: rgba(236, 253, 245, 0.6);
+    box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.3);
+  }
+}
+
+.highlight-request {
+  animation: highlight-pulse 0.5s ease-in-out 3;
+}
+
+/* Uygulama İçi Bildirimler (Mobil) */
+.in-app-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  max-width: 90%;
+  width: 350px;
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 16px;
+  z-index: 9999;
+  animation: slide-in 0.3s ease-out forwards;
+  cursor: pointer;
+  border-left: 4px solid #6366f1;
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.in-app-notification .notification-content {
+  padding-right: 24px;
+}
+
+.in-app-notification h4 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.in-app-notification p {
+  margin: 0;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.in-app-notification .notification-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+.in-app-notification .notification-close:hover {
+  background-color: #f3f4f6;
+  color: #4b5563;
+}
+
+@media (max-width: 640px) {
+  .in-app-notification {
+    width: calc(100% - 40px);
+    max-width: none;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+  }
+}

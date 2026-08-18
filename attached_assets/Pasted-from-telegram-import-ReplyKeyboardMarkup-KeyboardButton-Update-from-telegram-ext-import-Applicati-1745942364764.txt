@@ -1,0 +1,220 @@
+from telegram import ReplyKeyboardMarkup, KeyboardButton, Update
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
+from binance.client import Client
+import requests
+
+# Binance API Bilgilerini yaz
+BINANCE_API_KEY = "4f0aa20849f97a70c3f29e6a21798f923d3980eafc09005587007fe5583e6eac"
+BINANCE_API_SECRET = "b7ba4625460b7c9af17b917d808da40904f60f52a1651c3db83c004e03aebdbc"
+binance_client = Client(BINANCE_API_KEY, BINANCE_API_SECRET)
+
+# Telegram Bot TOKEN
+TOKEN = "7661657451:AAHrUY2h-FgLIfCE88O8-fi3CGHvO6HTEzg"
+
+# State'ler
+COIN, AMOUNT, STOP_PRICE, LIMIT_PRICE, TRAILING_PERCENT, RSI_PERIOD = range(6)
+
+
+# Karşılama mesajı
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [KeyboardButton("/stop_loss_buy"), KeyboardButton("/stop_loss_sell")],
+        [KeyboardButton("/trailing_stop"), KeyboardButton("/rsi_signal")],
+        [KeyboardButton("/coin_buy_sell")]
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+    await update.message.reply_text(
+        "👋 Hoşgeldin! Ben bir Binance botuyum ve alım/satım işlemleri için yardımcı olabilirim.\n\n"
+        "İşte yapabileceğim işlemler:\n"
+        "🛑 **/stop_loss_buy**: Alım işlemi için stop-loss emri verir.\n"
+        "🛑 **/stop_loss_sell**: Satış işlemi için stop-loss emri verir.\n"
+        "🔄 **/trailing_stop**: Otomatik koruma ekler, yani piyasa fiyatı belirlediğiniz yüzde kadar düştüğünde stop-loss emri devreye girer.\n"
+        "📉 **/rsi_signal**: RSI göstergesi ile alım/satım sinyali verir.\n"
+        "💰 **/coin_buy_sell**: Belirli bir coinin alım/satım işlemini yapar.\n\n"
+        "🔧 **Nasıl kullanılır?**\n"
+        "- Her işlem için önce coin ismini girin (örneğin: BTCUSDT).\n"
+        "- Ardından almak/satmak istediğiniz miktarı, stop fiyatını ve limit fiyatını belirleyin.\n\n"
+        "💬 Yardım almak için **/cancel** komutunu kullanabilirsiniz.",
+        reply_markup=reply_markup
+    )
+
+
+# Coin ismi alımı
+async def coin_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['coin'] = update.message.text.upper()
+    await update.message.reply_text("🪙 Kaç adet almak ya da satmak istiyorsun?")
+    return AMOUNT
+
+
+# Amount Received
+async def amount_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['amount'] = update.message.text
+    await update.message.reply_text("🔔 Hangi fiyatı geçince almak ya da satmak istiyorsun? (Stop price)")
+    return STOP_PRICE
+
+
+# Stop Price Received
+async def stop_price_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['stop_price'] = update.message.text
+    await update.message.reply_text("💵 Hangi fiyattan almak ya da satmak istiyorsun? (Limit price)")
+    return LIMIT_PRICE
+
+
+# Limit Price Received
+async def limit_price_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['limit_price'] = update.message.text
+
+    coin = context.user_data['coin']
+    amount = context.user_data['amount']
+    stop_price = context.user_data['stop_price']
+    limit_price = context.user_data['limit_price']
+
+    try:
+        order = binance_client.create_order(
+            symbol=coin,
+            side=Client.SIDE_BUY,
+            type=Client.ORDER_TYPE_STOP_LOSS_LIMIT,
+            quantity=amount,
+            price=limit_price,
+            stopPrice=stop_price,
+            timeInForce=Client.TIME_IN_FORCE_GTC
+        )
+        await update.message.reply_text(
+            f"✅ Stop-Loss Limit alım emir gönderildi!\n{coin} - {amount} adet\nStop: {stop_price}\nLimit: {limit_price}")
+    except Exception as e:
+        await update.message.reply_text(f"🚨 Hata oluştu: {e}")
+
+    return ConversationHandler.END
+
+
+# Trailing Stop Percent Received
+async def trailing_percent_received(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['trailing_percent'] = update.message.text
+
+    coin = context.user_data['coin']
+    trailing_percent = context.user_data['trailing_percent']
+
+    try:
+        # Otomatik koruma işlemi burada yapılacak
+        await update.message.reply_text(f"✅ {coin} için %{trailing_percent} koruma başarıyla ayarlandı!")
+    except Exception as e:
+        await update.message.reply_text(f"🚨 Hata oluştu: {e}")
+
+    return ConversationHandler.END
+
+
+# RSI Göstergesi Al ve Sinyal Gönder
+async def rsi_signal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    coin = context.user_data.get('coin', 'BTCUSDT')
+    period = context.user_data.get('rsi_period', 14)  # RSI dönemi 14 varsayılan
+
+    rsi = await get_rsi(coin, period)
+    if rsi > 70:
+        signal = "📉 Overbought! Satış yapmayı düşünebilirsiniz."
+    elif rsi < 30:
+        signal = "📈 Oversold! Alış yapmayı düşünebilirsiniz."
+    else:
+        signal = "📊 RSI normal seviyelerde."
+
+    await update.message.reply_text(f"RSI değeri: {rsi}\n{signal}")
+    return ConversationHandler.END
+
+
+# RSI Hesaplama (Binance API'sinden veri çekme)
+async def get_rsi(symbol: str, period: int):
+    url = f'https://api.binance.com/api/v3/klines'
+    params = {
+        'symbol': symbol,
+        'interval': '1h',  # 1 saatlik veriler
+        'limit': period + 1  # RSI için bir fazla veri lazım
+    }
+    response = requests.get(url, params=params)
+    data = response.json()
+    closes = [float(kline[4]) for kline in data]  # Kapanış fiyatları
+
+    gains = []
+    losses = []
+    for i in range(1, len(closes)):
+        change = closes[i] - closes[i - 1]
+        if change > 0:
+            gains.append(change)
+            losses.append(0)
+        else:
+            losses.append(abs(change))
+            gains.append(0)
+
+    avg_gain = sum(gains) / period
+    avg_loss = sum(losses) / period
+
+    if avg_loss == 0:
+        rsi = 100
+    else:
+        rs = avg_gain / avg_loss
+        rsi = 100 - (100 / (1 + rs))
+
+    return rsi
+
+
+# Coin Buy/Sell İşlemi
+async def coin_buy_sell(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("💬 Hangi coini almak/satmak istiyorsun? (Örn: BTCUSDT)")
+    return COIN
+
+
+# Stop Loss Buy İşlemi
+async def stop_loss_buy(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🛑 **Stop-Loss Alım** işlemi başlatıldı. Coin ismi, miktar, stop fiyatı ve limit fiyatını belirleyin.")
+    return COIN
+
+
+# Stop Loss Sell İşlemi
+async def stop_loss_sell(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🛑 **Stop-Loss Satış** işlemi başlatıldı. Coin ismi, miktar, stop fiyatı ve limit fiyatını belirleyin.")
+    return COIN
+
+
+# Trailing Stop İşlemi
+async def trailing_stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🔄 **Trailing Stop** işlemi başlatıldı. Coin ismi, trailing yüzde oranı ve miktarı belirleyin.")
+    return COIN
+
+
+# Cancel Command
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🚫 İşlem iptal edildi.")
+    return ConversationHandler.END
+
+
+def main():
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    # /start komutunu işleyecek handler'ı ekledik
+    app.add_handler(CommandHandler("start", start))
+
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('stop_loss_buy', stop_loss_buy),
+                      CommandHandler('stop_loss_sell', stop_loss_sell),
+                      CommandHandler('trailing_stop', trailing_stop),
+                      CommandHandler('rsi_signal', rsi_signal),
+                      CommandHandler('coin_buy_sell', coin_buy_sell)],
+        states={
+            COIN: [MessageHandler(filters.TEXT & ~filters.COMMAND, coin_received)],
+            AMOUNT: [MessageHandler(filters.TEXT & ~filters.COMMAND, amount_received)],
+            STOP_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, stop_price_received)],
+            LIMIT_PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, limit_price_received)],
+            TRAILING_PERCENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, trailing_percent_received)],
+            RSI_PERIOD: [MessageHandler(filters.TEXT & ~filters.COMMAND, rsi_signal)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel)]
+    )
+
+    app.add_handler(conv_handler)
+    app.run_polling()
+
+
+if __name__ == '__main__':
+    main()
