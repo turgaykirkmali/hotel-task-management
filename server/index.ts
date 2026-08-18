@@ -3,7 +3,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { configureSendGrid } from "./notifications";
 import { initializeTelegram } from "./telegram";
-import { bootstrapUsers, initializeBadgeCatalog } from "./bootstrap";
+import { bootstrapUsers, initializeBadgeCatalog, initializeOperationsSchema } from "./bootstrap";
 
 const app = express();
 app.use(express.json());
@@ -73,6 +73,15 @@ app.use((req, res, next) => {
   });
 
   const server = await registerRoutes(app);
+
+  // Ensure production database has the tables/columns required by the operations modules.
+  // This is idempotent and does not remove or rewrite existing data.
+  try {
+    await initializeOperationsSchema();
+  } catch (error) {
+    console.error("Bootstrap operations schema kurulumu başarısız:", error);
+    throw error;
+  }
 
   // Initialize the badge catalog independently from privileged-user bootstrap.
   // This ensures badges are available even if account bootstrap configuration changes.

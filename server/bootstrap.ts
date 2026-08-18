@@ -1,7 +1,56 @@
 import { eq } from "drizzle-orm";
-import { db } from "./db";
+import { db, pool } from "./db";
 import { badges, hotels, users, slaPolicies, departments } from "@shared/schema";
 import { hashPassword } from "./auth";
+
+export async function initializeOperationsSchema() {
+  console.log("Bootstrap: verifying operations database schema...");
+
+  const statements = [
+    `CREATE TABLE IF NOT EXISTS sla_policies (
+      id SERIAL PRIMARY KEY,
+      hotel_id INTEGER NOT NULL REFERENCES hotels(id),
+      department TEXT NOT NULL,
+      priority TEXT NOT NULL DEFAULT 'normal',
+      minutes INTEGER NOT NULL,
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS audit_logs (
+      id SERIAL PRIMARY KEY,
+      hotel_id INTEGER REFERENCES hotels(id),
+      user_id INTEGER REFERENCES users(id),
+      request_id INTEGER REFERENCES requests(id),
+      action TEXT NOT NULL,
+      entity_type TEXT NOT NULL DEFAULT 'request',
+      details TEXT DEFAULT '{}',
+      source TEXT NOT NULL DEFAULT 'web',
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS room_statuses (
+      id SERIAL PRIMARY KEY,
+      hotel_id INTEGER NOT NULL REFERENCES hotels(id),
+      room_number TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'ready',
+      updated_by_id INTEGER REFERENCES users(id),
+      note TEXT,
+      updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )`,
+    `ALTER TABLE requests ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMP`,
+    `ALTER TABLE requests ADD COLUMN IF NOT EXISTS started_at TIMESTAMP`,
+    `ALTER TABLE requests ADD COLUMN IF NOT EXISTS sla_breached_at TIMESTAMP`,
+    `CREATE INDEX IF NOT EXISTS idx_sla_policies_hotel ON sla_policies(hotel_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_audit_logs_hotel_created ON audit_logs(hotel_id, created_at)`,
+    `CREATE INDEX IF NOT EXISTS idx_audit_logs_request ON audit_logs(request_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_room_statuses_hotel_room ON room_statuses(hotel_id, room_number)`
+  ];
+
+  for (const sql of statements) {
+    await pool.query(sql);
+  }
+
+  console.log("Bootstrap: operations database schema verified (SLA, audit, room status, request SLA fields).");
+}
 
 async function seedDefaultSlaPolicies(hotelId: number) {
   const existing = await db.select().from(slaPolicies).where(eq(slaPolicies.hotelId, hotelId)).limit(1);
