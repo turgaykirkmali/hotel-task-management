@@ -82,18 +82,3 @@ Optional:
 - `BOOTSTRAP_HOTEL_NAME`
 
 The build command must run `npm ci && npm run db:push && npm run build`. The application now fails fast if bootstrap credentials are missing instead of silently skipping user creation.
-
-
-## v9 Hotel Operations Platform additions
-
-- SLA policies are seeded automatically per hotel and priority.
-- New requests receive an automatic deadline when one is not supplied.
-- Request lifecycle records `startedAt` and SLA breach timestamps.
-- Audit trail records creation, assignment, status, priority, deadline and room-status changes.
-- Executive operations endpoint: `/api/operations/executive`
-- Audit endpoint: `/api/audit-logs`
-- SLA endpoint: `/api/sla-policies`
-- Room operations endpoints: `/api/rooms`
-- New web UI: **Operasyon Merkezi** with management KPIs, SLA, staff performance, overdue work, room status and audit trail.
-- Existing Telegram assignment / accept / complete workflow remains unchanged.
-- Existing UI design remains intact; the new center is an additive module.

@@ -3,7 +3,7 @@ services:
     name: hotel-task-management
     runtime: node
     plan: free
-    buildCommand: npm ci && npm run db:push && npm run build
+    buildCommand: npm ci && npm run build
     startCommand: npm start
     healthCheckPath: /healthz
     envVars:
