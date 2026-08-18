@@ -164,7 +164,7 @@ export default function NotificationPopover({
           <span className={`absolute -bottom-1 -right-1 w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-gray-400'}`}></span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80 p-0" align="end">
+      <PopoverContent className="z-[110] w-80 overflow-hidden rounded-md border border-gray-200 bg-white p-0 shadow-xl" align="end">
         <div className="p-4 border-b border-gray-200">
           <h3 className="text-lg font-semibold">Bildirimler</h3>
           <p className="text-sm text-gray-500">
