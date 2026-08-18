@@ -17,9 +17,10 @@ import { departments } from '@shared/schema';
 
 interface NewRequestProps {
   onSuccess: () => void;
+  hotelId?: number;
 }
 
-export default function NewRequest({ onSuccess }: NewRequestProps) {
+export default function NewRequest({ onSuccess, hotelId }: NewRequestProps) {
   const { toast } = useToast();
   const [newRequest, setNewRequest] = useState({
     roomNumber: "",
@@ -39,7 +40,7 @@ export default function NewRequest({ onSuccess }: NewRequestProps) {
       // Mevcut kullanıcının otel ID'sini isteğe ekle
       const requestWithHotelId = {
         ...requestData,
-        hotelId: currentUser.hotelId || 1,
+        hotelId: hotelId || currentUser.hotelId || undefined,
       };
       console.log('Creating request with data:', requestWithHotelId);
       return apiRequest('POST', '/api/requests', requestWithHotelId);

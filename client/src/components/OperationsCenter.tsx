@@ -14,7 +14,10 @@ export default function OperationsCenter({ hotelId }: { hotelId?: number }) {
   const { data: executive } = useQuery<any>({ queryKey: ["/api/operations/executive", hotelId], queryFn: async()=>{ const u=hotelId?`/api/operations/executive?hotelId=${hotelId}`:"/api/operations/executive"; const r=await fetch(u); if(!r.ok) throw new Error("Operasyon verisi alınamadı"); return r.json(); } });
   const { data: rooms=[] } = useQuery<any[]>({ queryKey: ["/api/rooms", hotelId], queryFn: async()=>{ const u=hotelId?`/api/rooms?hotelId=${hotelId}`:"/api/rooms"; const r=await fetch(u); return r.json(); } });
   const { data: audits=[] } = useQuery<any[]>({ queryKey: ["/api/audit-logs", hotelId], queryFn: async()=>{ const u=hotelId?`/api/audit-logs?hotelId=${hotelId}`:"/api/audit-logs"; const r=await fetch(u); return r.json(); } });
-  const addRoom = useMutation({ mutationFn:()=>apiRequest("POST","/api/rooms",{roomNumber}), onSuccess:()=>{setRoomNumber("");queryClient.invalidateQueries({queryKey:["/api/rooms",hotelId]});} });
+  const addRoom = useMutation({
+    mutationFn:()=>apiRequest("POST","/api/rooms",{roomNumber, hotelId}),
+    onSuccess:()=>{setRoomNumber("");queryClient.invalidateQueries({queryKey:["/api/rooms",hotelId]});},
+  });
 
   return <div className="p-6 space-y-6">
     <Tabs defaultValue="executive">

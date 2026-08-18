@@ -174,49 +174,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // POST create new request
   app.post("/api/requests", async (req: Request, res: Response) => {
     try {
-      const validatedData = insertRequestSchema.parse(req.body);
-      
-      // Get random employee from department
-      const department = validatedData.department;
-      const departmentEmployees = await storage.getEmployeesByDepartment(department);
-      
-      let assignedTo = "Atanmadı";
-      
-      if (departmentEmployees.length > 0) {
-        const randomIndex = Math.floor(Math.random() * departmentEmployees.length);
-        assignedTo = departmentEmployees[randomIndex].name;
+      const currentUser = req.user;
+      if (!currentUser) {
+        return res.status(401).json({ message: "Oturum açmanız gerekiyor" });
       }
-      
+
+      const validatedData = insertRequestSchema.parse(req.body);
+      const department = validatedData.department;
+      const priority = (validatedData.priority || req.body.priority || "normal") as string;
+
+      // Hotel is taken from the authenticated user for normal users.
+      // Superadmins may create a request for the selected hotel via hotelId.
+      let hotelId: number | null = currentUser.hotelId ?? null;
+      if (currentUser.role === "superadmin" && req.body.hotelId) {
+        const requestedHotelId = Number(req.body.hotelId);
+        if (Number.isInteger(requestedHotelId) && requestedHotelId > 0) {
+          hotelId = requestedHotelId;
+        }
+      }
+      if (!hotelId) {
+        return res.status(400).json({ message: "İstek oluşturmak için otel seçilmelidir" });
+      }
+
+      const slaMinutes = await getSlaMinutes(hotelId, department, priority);
+      const computedDeadline = new Date(Date.now() + slaMinutes * 60 * 1000);
+
+      // Assignment remains optional. The existing Telegram/web assignment workflow
+      // can assign the request afterwards through assignedToId.
       const newRequest = await storage.createRequest({
         ...validatedData,
         hotelId,
         priority,
         deadline: computedDeadline,
-        assignedTo,
-        createdById: (req as any).user?.id ?? null
+        assignedToId: validatedData.assignedToId ?? null,
+        createdById: currentUser.id
       });
-      await writeAudit(newRequest.hotelId, req.user?.id, newRequest.id, "request_created", {
+
+      await writeAudit(newRequest.hotelId, currentUser.id, newRequest.id, "request_created", {
         department: newRequest.department,
         priority: newRequest.priority,
         slaMinutes
       });
-      
+
       // Send notification via WebSocket
       if (app.locals.notifyClients && newRequest.hotelId) {
         app.locals.notifyClients({
           type: 'new_request',
           request: newRequest
         }, newRequest.hotelId);
-        
-        // Send email notification
+
         try {
           await notifyNewRequest(newRequest);
         } catch (emailError) {
           console.error("Email notification error:", emailError);
-          // Continue even if email fails
         }
       }
-      
+
       res.status(201).json(newRequest);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -646,9 +659,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const u = req.user;
       if (!u || (u.role !== "admin" && u.role !== "superadmin")) return res.status(403).json({ message: "Yetkisiz" });
-      const hotelId = u.role === "superadmin" && req.body.hotelId ? Number(req.body.hotelId) : u.hotelId;
+      let hotelId = u.hotelId ?? null;
+      if (u.role === "superadmin" && req.body.hotelId) {
+        const requestedHotelId = Number(req.body.hotelId);
+        if (Number.isInteger(requestedHotelId) && requestedHotelId > 0) hotelId = requestedHotelId;
+      }
       if (!hotelId || !req.body.roomNumber) return res.status(400).json({ message: "Otel ve oda numarası gerekli" });
-      const [row] = await db.insert(roomStatuses).values({ hotelId, roomNumber: String(req.body.roomNumber), status: req.body.status || "ready", note: req.body.note || null, updatedById: u.id }).returning();
+
+      const roomNumber = String(req.body.roomNumber).trim();
+      if (!roomNumber) return res.status(400).json({ message: "Oda numarası gerekli" });
+
+      const [duplicate] = await db.select({ id: roomStatuses.id })
+        .from(roomStatuses)
+        .where(and(eq(roomStatuses.hotelId, hotelId), eq(roomStatuses.roomNumber, roomNumber)))
+        .limit(1);
+      if (duplicate) return res.status(409).json({ message: "Bu oda zaten kayıtlı" });
+
+      const [row] = await db.insert(roomStatuses).values({
+        hotelId,
+        roomNumber,
+        status: req.body.status || "ready",
+        note: req.body.note || null,
+        updatedById: u.id
+      }).returning();
+      await writeAudit(hotelId, u.id, null, "room_created", { roomNumber, status: row.status });
       res.status(201).json(row);
     } catch (error) {
       console.error(error);

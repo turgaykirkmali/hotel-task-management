@@ -297,7 +297,7 @@ export default function HotelRequestSystem() {
           )}
           
           {activeTab === "new-request" && (
-            <NewRequest onSuccess={() => {
+            <NewRequest hotelId={selectedHotelId || userData?.hotelId || undefined} onSuccess={() => {
               queryClient.invalidateQueries({ queryKey: ['/api/requests'] });
               setActiveTab("requests");
             }} />
