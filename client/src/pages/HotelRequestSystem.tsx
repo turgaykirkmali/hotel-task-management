@@ -8,6 +8,7 @@ import { Loader2 } from 'lucide-react';
 
 import Sidebar from '@/components/Sidebar';
 import Dashboard from '@/components/Dashboard';
+import OperationsCenter from '@/components/OperationsCenter';
 import RequestsList from '@/components/RequestsList';
 import NewRequest from '@/components/NewRequest';
 import Reports from '@/components/Reports';
@@ -177,6 +178,7 @@ export default function HotelRequestSystem() {
       requests: 'İstek Listesi',
       'new-request': 'Yeni İstek Oluştur',
       reports: 'Raporlar',
+      operations: 'Operasyon Merkezi',
       'mood-board': 'Duygu Durumu Panosu',
       badges: 'Rozetler',
       settings: 'Ayarlar'
@@ -301,6 +303,10 @@ export default function HotelRequestSystem() {
             }} />
           )}
           
+          {activeTab === "operations" && (
+            <OperationsCenter hotelId={selectedHotelId || userData?.hotelId || undefined} />
+          )}
+
           {activeTab === "reports" && (
             <Reports 
               requests={requests} 

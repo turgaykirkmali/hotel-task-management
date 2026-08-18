@@ -81,6 +81,9 @@ export const requests = pgTable("requests", {
   hotelId: integer("hotel_id").references(() => hotels.id),
   deadline: timestamp("deadline"),
   priority: text("priority").default("normal"),
+  acceptedAt: timestamp("accepted_at"),
+  startedAt: timestamp("started_at"),
+  slaBreachedAt: timestamp("sla_breached_at"),
 });
 
 export const insertRequestSchema = createInsertSchema(requests).pick({
@@ -115,6 +118,44 @@ export type Request = typeof requests.$inferSelect & {
     username: string;
   } | null;
 };
+
+// Departman / öncelik bazlı SLA politikaları
+export const slaPolicies = pgTable("sla_policies", {
+  id: serial("id").primaryKey(),
+  hotelId: integer("hotel_id").notNull().references(() => hotels.id),
+  department: text("department").notNull(),
+  priority: text("priority").notNull().default("normal"),
+  minutes: integer("minutes").notNull(),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type SlaPolicy = typeof slaPolicies.$inferSelect;
+
+// Değişikliklerin izlenmesi için audit trail
+export const auditLogs = pgTable("audit_logs", {
+  id: serial("id").primaryKey(),
+  hotelId: integer("hotel_id").references(() => hotels.id),
+  userId: integer("user_id").references(() => users.id),
+  requestId: integer("request_id").references(() => requests.id),
+  action: text("action").notNull(),
+  entityType: text("entity_type").notNull().default("request"),
+  details: text("details").default("{}"),
+  source: text("source").notNull().default("web"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type AuditLog = typeof auditLogs.$inferSelect;
+
+// Oda operasyon durumu
+export const roomStatuses = pgTable("room_statuses", {
+  id: serial("id").primaryKey(),
+  hotelId: integer("hotel_id").notNull().references(() => hotels.id),
+  roomNumber: text("room_number").notNull(),
+  status: text("status").notNull().default("ready"),
+  updatedById: integer("updated_by_id").references(() => users.id),
+  note: text("note"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+export type RoomStatus = typeof roomStatuses.$inferSelect;
 
 // Department employees schema
 export const employees = pgTable("employees", {

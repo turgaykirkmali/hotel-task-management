@@ -13,6 +13,9 @@ import {
 } from "@shared/schema";
 import { setupAuth, hashPassword } from "./auth";
 import { WebSocketServer } from "ws";
+import { db } from "./db";
+import { auditLogs, roomStatuses, slaPolicies, requests as requestsTable } from "@shared/schema";
+import { and, eq, desc, sql } from "drizzle-orm";
 import { notifyNewRequest, notifyStatusUpdate, notifyOverdueRequest } from "./notifications";
 import { 
   addTelegramUserMapping, 
@@ -20,6 +23,33 @@ import {
   getTelegramStatus,
   setRequestUpdateCallback
 } from "./telegram";
+
+async function getSlaMinutes(hotelId: number | null | undefined, department: string, priority = "normal") {
+  if (!hotelId) return 30;
+  const [policy] = await db.select().from(slaPolicies)
+    .where(and(eq(slaPolicies.hotelId, hotelId), eq(slaPolicies.department, department), eq(slaPolicies.priority, priority), eq(slaPolicies.active, true)))
+    .limit(1);
+  if (policy) return policy.minutes;
+  const [fallback] = await db.select().from(slaPolicies)
+    .where(and(eq(slaPolicies.hotelId, hotelId), eq(slaPolicies.department, department), eq(slaPolicies.priority, "normal"), eq(slaPolicies.active, true)))
+    .limit(1);
+  return fallback?.minutes ?? 30;
+}
+
+async function writeAudit(hotelId: number | null | undefined, userId: number | null | undefined, requestId: number | null | undefined, action: string, details: Record<string, unknown> = {}, source = "web") {
+  try {
+    await db.insert(auditLogs).values({
+      hotelId: hotelId ?? null,
+      userId: userId ?? null,
+      requestId: requestId ?? null,
+      action,
+      details: JSON.stringify(details),
+      source
+    });
+  } catch (error) {
+    console.error("Audit log yazılamadı:", error);
+  }
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication
@@ -159,8 +189,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const newRequest = await storage.createRequest({
         ...validatedData,
+        hotelId,
+        priority,
+        deadline: computedDeadline,
         assignedTo,
         createdById: (req as any).user?.id ?? null
+      });
+      await writeAudit(newRequest.hotelId, req.user?.id, newRequest.id, "request_created", {
+        department: newRequest.department,
+        priority: newRequest.priority,
+        slaMinutes
       });
       
       // Send notification via WebSocket
@@ -219,6 +257,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const completedAt = status === "tamamlandı" ? new Date() : null;
       const completedById = req.user?.id; // İşlemi tamamlayan kullanıcının bilgisi
       const updatedRequest = await storage.updateRequestStatus(id, status, completedAt, completedById);
+      if (status === "işlemde") {
+        await db.update(requestsTable).set({ startedAt: new Date() }).where(eq(requestsTable.id, id));
+      } else if (status === "tamamlandı") {
+        await db.update(requestsTable).set({ startedAt: updatedRequest.startedAt ?? request.createdAt }).where(eq(requestsTable.id, id));
+      }
+      if (status !== "tamamlandı" && updatedRequest.deadline && new Date() > new Date(updatedRequest.deadline)) {
+        await db.update(requestsTable).set({ slaBreachedAt: updatedRequest.slaBreachedAt ?? new Date(), status: "geciken" }).where(eq(requestsTable.id, id));
+      }
+      await writeAudit(updatedRequest.hotelId, req.user?.id, id, "status_changed", { from: request.status, to: status });
       
       // Send status update notification via WebSocket
       if (app.locals.notifyClients && updatedRequest.hotelId) {
@@ -271,6 +318,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const updatedRequest = await storage.updateRequestPriority(id, priority);
+      await writeAudit(updatedRequest.hotelId, req.user?.id, id, "priority_changed", { from: request.priority, to: priority });
       
       // Send priority update notification via WebSocket
       if (app.locals.notifyClients && updatedRequest.hotelId) {
@@ -318,6 +366,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const updatedRequest = await storage.updateRequestDeadline(id, deadlineDate);
+      await writeAudit(updatedRequest.hotelId, req.user?.id, id, "deadline_changed", { deadline: deadlineDate.toISOString() });
       
       // Send deadline update notification via WebSocket
       if (app.locals.notifyClients && updatedRequest.hotelId) {
@@ -365,6 +414,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Atama işlemi
       const updatedRequest = await storage.assignRequestToUser(id, assignedToId);
+      await writeAudit(updatedRequest.hotelId, req.user?.id, id, "assigned", { assignedToId: assignedToId ?? null });
       
       // WebSocket bildirimi gönder
       if (app.locals.notifyClients && updatedRequest.hotelId) {
@@ -474,6 +524,152 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching department users:", error);
       res.status(500).json({ message: "Error fetching department users" });
+    }
+  });
+
+  // Executive Operations Dashboard
+  app.get("/api/operations/executive", async (req: Request, res: Response) => {
+    try {
+      const u = req.user;
+      if (!u) return res.status(401).json({ message: "Unauthorized" });
+      const hotelId = u.role === "superadmin" && req.query.hotelId ? parseInt(req.query.hotelId as string) : u.hotelId;
+      const rows = hotelId ? await storage.getRequestsByHotelId(hotelId) : await storage.getAllRequests();
+      const now = Date.now();
+      const active = rows.filter(r => r.status !== "tamamlandı");
+      const overdue = active.filter(r => r.deadline && new Date(r.deadline).getTime() < now);
+      const completed = rows.filter(r => r.status === "tamamlandı" && r.completedAt);
+      const avgMinutes = completed.length ? Math.round(completed.reduce((sum, r) => sum + (new Date(r.completedAt!).getTime() - new Date(r.createdAt).getTime()) / 60000, 0) / completed.length) : 0;
+      const eligible = completed.filter(r => r.deadline && r.completedAt);
+      const slaSuccess = eligible.length ? Math.round(eligible.filter(r => new Date(r.completedAt!).getTime() <= new Date(r.deadline!).getTime()).length / eligible.length * 100) : 100;
+      const dept = departments.map(d => {
+        const rs = rows.filter(r => r.department === d);
+        const done = rs.filter(r => r.status === "tamamlandı" && r.completedAt);
+        const e = done.filter(r => r.deadline);
+        return {
+          department: d,
+          total: rs.length,
+          completed: done.length,
+          overdue: rs.filter(r => r.status === "geciken" || (r.deadline && r.status !== "tamamlandı" && new Date(r.deadline).getTime() < now)).length,
+          slaSuccess: e.length ? Math.round(e.filter(r => new Date(r.completedAt!).getTime() <= new Date(r.deadline!).getTime()).length / e.length * 100) : 100,
+          avgMinutes: done.length ? Math.round(done.reduce((sum,r)=>sum+(new Date(r.completedAt!).getTime()-new Date(r.createdAt).getTime())/60000,0)/done.length) : 0
+        };
+      });
+      const people = new Map<number, any>();
+      for (const r of rows) {
+        if (!r.assignedToId || !r.assignedUser) continue;
+        const x = people.get(r.assignedToId) ?? { userId: r.assignedToId, name: `${r.assignedUser.firstName || ""} ${r.assignedUser.lastName || ""}`.trim() || r.assignedUser.username, total: 0, completed: 0, overdue: 0, minutes: 0, slaOk: 0, slaEligible: 0 };
+        x.total++;
+        if (r.status === "tamamlandı" && r.completedAt) {
+          x.completed++;
+          x.minutes += (new Date(r.completedAt).getTime() - new Date(r.createdAt).getTime()) / 60000;
+          if (r.deadline) {
+            x.slaEligible++;
+            if (new Date(r.completedAt).getTime() <= new Date(r.deadline).getTime()) x.slaOk++;
+          }
+        }
+        if (r.status === "geciken" || (r.deadline && r.status !== "tamamlandı" && new Date(r.deadline).getTime() < now)) x.overdue++;
+        people.set(r.assignedToId, x);
+      }
+      const staff = Array.from(people.values()).map(x => ({
+        ...x,
+        completionRate: x.total ? Math.round(x.completed / x.total * 100) : 0,
+        slaSuccess: x.slaEligible ? Math.round(x.slaOk / x.slaEligible * 100) : 100,
+        avgMinutes: x.completed ? Math.round(x.minutes / x.completed) : 0
+      })).sort((a,b) => b.slaSuccess - a.slaSuccess || b.completed - a.completed).slice(0,20);
+      res.json({ total: rows.length, active: active.length, completed: completed.length, overdue: overdue.length, avgMinutes, slaSuccess, departments: dept, staff, recentOverdue: overdue.sort((a,b)=>new Date(a.deadline!).getTime()-new Date(b.deadline!).getTime()).slice(0,10) });
+    } catch (error) {
+      console.error("Executive dashboard error:", error);
+      res.status(500).json({ message: "Executive dashboard alınamadı" });
+    }
+  });
+
+  // Audit Trail
+  app.get("/api/audit-logs", async (req: Request, res: Response) => {
+    try {
+      const u = req.user;
+      if (!u) return res.status(401).json({ message: "Unauthorized" });
+      const hotelId = u.role === "superadmin" && req.query.hotelId ? parseInt(req.query.hotelId as string) : u.hotelId;
+      const rows = hotelId
+        ? await db.select().from(auditLogs).where(eq(auditLogs.hotelId, hotelId)).orderBy(desc(auditLogs.createdAt)).limit(200)
+        : await db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt)).limit(200);
+      res.json(rows);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Audit log alınamadı" });
+    }
+  });
+
+  // SLA Policies
+  app.get("/api/sla-policies", async (req: Request, res: Response) => {
+    try {
+      const u = req.user;
+      if (!u) return res.status(401).json({ message: "Unauthorized" });
+      const hotelId = u.role === "superadmin" && req.query.hotelId ? parseInt(req.query.hotelId as string) : u.hotelId;
+      if (!hotelId) return res.json([]);
+      res.json(await db.select().from(slaPolicies).where(eq(slaPolicies.hotelId, hotelId)).orderBy(slaPolicies.department));
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "SLA politikaları alınamadı" });
+    }
+  });
+
+  app.post("/api/sla-policies", async (req: Request, res: Response) => {
+    try {
+      const u = req.user;
+      if (!u || (u.role !== "admin" && u.role !== "superadmin")) return res.status(403).json({ message: "Yetkisiz" });
+      const hotelId = u.role === "superadmin" && req.body.hotelId ? Number(req.body.hotelId) : u.hotelId;
+      const { department, priority = "normal", minutes } = req.body;
+      if (!hotelId || !department || !minutes) return res.status(400).json({ message: "Eksik alan" });
+      const [row] = await db.insert(slaPolicies).values({ hotelId, department, priority, minutes: Number(minutes), active: true }).returning();
+      res.status(201).json(row);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "SLA oluşturulamadı" });
+    }
+  });
+
+  // Room Operations
+  app.get("/api/rooms", async (req: Request, res: Response) => {
+    try {
+      const u = req.user;
+      if (!u) return res.status(401).json({ message: "Unauthorized" });
+      const hotelId = u.role === "superadmin" && req.query.hotelId ? parseInt(req.query.hotelId as string) : u.hotelId;
+      if (!hotelId) return res.json([]);
+      res.json(await db.select().from(roomStatuses).where(eq(roomStatuses.hotelId, hotelId)).orderBy(roomStatuses.roomNumber));
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Odalar alınamadı" });
+    }
+  });
+
+  app.post("/api/rooms", async (req: Request, res: Response) => {
+    try {
+      const u = req.user;
+      if (!u || (u.role !== "admin" && u.role !== "superadmin")) return res.status(403).json({ message: "Yetkisiz" });
+      const hotelId = u.role === "superadmin" && req.body.hotelId ? Number(req.body.hotelId) : u.hotelId;
+      if (!hotelId || !req.body.roomNumber) return res.status(400).json({ message: "Otel ve oda numarası gerekli" });
+      const [row] = await db.insert(roomStatuses).values({ hotelId, roomNumber: String(req.body.roomNumber), status: req.body.status || "ready", note: req.body.note || null, updatedById: u.id }).returning();
+      res.status(201).json(row);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Oda oluşturulamadı" });
+    }
+  });
+
+  app.patch("/api/rooms/:id", async (req: Request, res: Response) => {
+    try {
+      const u = req.user;
+      if (!u) return res.status(401).json({ message: "Unauthorized" });
+      const id = Number(req.params.id);
+      const [old] = await db.select().from(roomStatuses).where(eq(roomStatuses.id, id));
+      if (!old) return res.status(404).json({ message: "Oda bulunamadı" });
+      if (u.role !== "superadmin" && u.hotelId !== old.hotelId) return res.status(403).json({ message: "Yetkisiz" });
+      const [row] = await db.update(roomStatuses).set({ status: req.body.status ?? old.status, note: req.body.note ?? old.note, updatedById: u.id, updatedAt: new Date() }).where(eq(roomStatuses.id, id)).returning();
+      await writeAudit(row.hotelId, u.id, null, "room_status_changed", { roomNumber: row.roomNumber, status: row.status });
+      res.json(row);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ message: "Oda güncellenemedi" });
     }
   });
 

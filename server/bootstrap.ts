@@ -3,6 +3,24 @@ import { db } from "./db";
 import { badges, hotels, users } from "@shared/schema";
 import { hashPassword } from "./auth";
 
+async function seedDefaultSlaPolicies(hotelId: number) {
+  const existing = await db.select().from(slaPolicies).where(eq(slaPolicies.hotelId, hotelId)).limit(1);
+  if (existing.length) return;
+  const defaults: Record<string, Record<string, number>> = {
+    "Kat Hizmetleri": { low: 30, normal: 20, high: 10 },
+    "Resepsiyon": { low: 20, normal: 10, high: 5 },
+    "Teknik Servis": { low: 60, normal: 30, high: 15 },
+    "Restoran": { low: 30, normal: 15, high: 10 },
+    "Güvenlik": { low: 20, normal: 10, high: 5 },
+  };
+  for (const department of departments) {
+    for (const priority of ["low", "normal", "high"] as const) {
+      await db.insert(slaPolicies).values({ hotelId, department, priority, minutes: defaults[department]?.[priority] ?? 30, active: true });
+    }
+  }
+  console.log(`Bootstrap: default SLA policies seeded for hotel ${hotelId}.`);
+}
+
 /**
  * Creates the initial privileged accounts on a fresh deployment.
  * Accounts are only created when they do not already exist.
@@ -115,6 +133,8 @@ export async function bootstrapUsers() {
     adminHotelId = defaultHotel.id;
     console.log(`Bootstrap: default hotel created (id=${adminHotelId}).`);
   }
+
+  await seedDefaultSlaPolicies(adminHotelId);
 
   const existingSuperadmin = await db.select().from(users).where(eq(users.username, superadminUsername)).limit(1);
   if (existingSuperadmin.length === 0) {

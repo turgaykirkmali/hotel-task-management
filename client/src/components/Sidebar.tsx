@@ -1,4 +1,4 @@
-import { Home, ClipboardList, FileText, Settings, Bell, PlusCircle, LogOut, Building2, ChevronDown, SmilePlus, ShoppingBag, Trophy } from 'lucide-react';
+import { Home, ClipboardList, FileText, Settings, Bell, PlusCircle, LogOut, Building2, ChevronDown, SmilePlus, ShoppingBag, Trophy, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { 
   Select, 
@@ -152,6 +152,14 @@ export default function Sidebar({
             Yeni İstek Oluştur
           </button>
           
+          <button 
+            className={`flex items-center w-full px-4 py-2 text-sm font-medium rounded-md ${activeTab === "operations" ? "bg-primary/10 text-primary" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`}
+            onClick={() => handleTabClick("operations")}
+          >
+            <BarChart3 className="h-5 w-5 mr-3" />
+            Operasyon Merkezi
+          </button>
+
           <button 
             className={`flex items-center w-full px-4 py-2 text-sm font-medium rounded-md ${activeTab === "reports" ? "bg-primary/10 text-primary" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`}
             onClick={() => handleTabClick("reports")}
