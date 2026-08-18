@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: hotel-task-management
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: DATABASE_SSL
+        value: true
+      - key: DB_POOL_MAX
+        value: 5
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: SENDGRID_API_KEY
+        sync: false

@@ -1,0 +1,1 @@
+ALTER TABLE requests ADD COLUMN IF NOT EXISTS assigned_to_id INTEGER REFERENCES users(id);
