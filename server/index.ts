@@ -3,7 +3,7 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { configureSendGrid } from "./notifications";
 import { initializeTelegram } from "./telegram";
-import { bootstrapUsers } from "./bootstrap";
+import { bootstrapUsers, initializeBadgeCatalog } from "./bootstrap";
 
 const app = express();
 app.use(express.json());
@@ -73,6 +73,16 @@ app.use((req, res, next) => {
   });
 
   const server = await registerRoutes(app);
+
+  // Initialize the badge catalog independently from privileged-user bootstrap.
+  // This ensures badges are available even if account bootstrap configuration changes.
+  console.log("Bootstrap: invoking badge catalog initialization...");
+  try {
+    await initializeBadgeCatalog();
+  } catch (error) {
+    console.error("Bootstrap rozet kataloğu kurulumu başarısız:", error);
+    throw error;
+  }
 
   // Create initial privileged users on a fresh deployment.
   // This runs after the schema is available and before the server starts accepting traffic.

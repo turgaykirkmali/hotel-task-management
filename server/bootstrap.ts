@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "./db";
-import { hotels, users } from "@shared/schema";
+import { badges, hotels, users } from "@shared/schema";
 import { hashPassword } from "./auth";
 
 /**
@@ -17,6 +17,53 @@ import { hashPassword } from "./auth";
  *   BOOTSTRAP_HOTEL_NAME - creates a default hotel if none exists
  *   BOOTSTRAP_RESET_PASSWORDS=true - one-time password reset for existing bootstrap users
  */
+const DEFAULT_BADGES = [
+  { name: "Hız Bronz", description: "10 tamamlanmış isteği hızlı ve başarılı şekilde tamamla.", type: "hız_rozeti", level: "bronz", pointsRequired: 100 },
+  { name: "Hız Gümüş", description: "30 tamamlanmış isteği hızlı ve başarılı şekilde tamamla.", type: "hız_rozeti", level: "gümüş", pointsRequired: 300 },
+  { name: "Hız Altın", description: "60 tamamlanmış isteği hızlı ve başarılı şekilde tamamla.", type: "hız_rozeti", level: "altın", pointsRequired: 600 },
+  { name: "Hız Platin", description: "100 tamamlanmış isteği hızlı ve başarılı şekilde tamamla.", type: "hız_rozeti", level: "platin", pointsRequired: 1000 },
+
+  { name: "Kalite Bronz", description: "Kaliteli ve eksiksiz hizmet sunmaya katkıda bulun.", type: "kalite_rozeti", level: "bronz", pointsRequired: 100 },
+  { name: "Kalite Gümüş", description: "Sürekli yüksek kalite standardını koru.", type: "kalite_rozeti", level: "gümüş", pointsRequired: 300 },
+  { name: "Kalite Altın", description: "Üstün hizmet kalitesiyle örnek ol.", type: "kalite_rozeti", level: "altın", pointsRequired: 600 },
+  { name: "Kalite Platin", description: "Olağanüstü kalite standardını sürekli sürdür.", type: "kalite_rozeti", level: "platin", pointsRequired: 1000 },
+
+  { name: "Verimlilik Bronz", description: "Kaynakları etkin kullanarak verimli çalış.", type: "verimlilik_rozeti", level: "bronz", pointsRequired: 100 },
+  { name: "Verimlilik Gümüş", description: "İş süreçlerinde sürdürülebilir verimlilik sağla.", type: "verimlilik_rozeti", level: "gümüş", pointsRequired: 300 },
+  { name: "Verimlilik Altın", description: "Yüksek operasyonel verimlilik göster.", type: "verimlilik_rozeti", level: "altın", pointsRequired: 600 },
+  { name: "Verimlilik Platin", description: "Operasyonel verimlilikte örnek performans göster.", type: "verimlilik_rozeti", level: "platin", pointsRequired: 1000 },
+
+  { name: "Ekip Bronz", description: "Ekip çalışmasına ve iş birliğine katkı sağla.", type: "ekip_rozeti", level: "bronz", pointsRequired: 100 },
+  { name: "Ekip Gümüş", description: "Departmanlar arası iş birliğini güçlendir.", type: "ekip_rozeti", level: "gümüş", pointsRequired: 300 },
+  { name: "Ekip Altın", description: "Takım ruhu ve iş birliğinde örnek ol.", type: "ekip_rozeti", level: "altın", pointsRequired: 600 },
+  { name: "Ekip Platin", description: "Ekip performansını ve dayanışmayı ileri taşı.", type: "ekip_rozeti", level: "platin", pointsRequired: 1000 },
+
+  { name: "Misafir Memnuniyeti Bronz", description: "Misafir memnuniyetine olumlu katkı sağla.", type: "müşteri_memnuniyeti", level: "bronz", pointsRequired: 100 },
+  { name: "Misafir Memnuniyeti Gümüş", description: "Yüksek misafir memnuniyeti standardını destekle.", type: "müşteri_memnuniyeti", level: "gümüş", pointsRequired: 300 },
+  { name: "Misafir Memnuniyeti Altın", description: "Misafir deneyiminde üstün performans göster.", type: "müşteri_memnuniyeti", level: "altın", pointsRequired: 600 },
+  { name: "Misafir Memnuniyeti Platin", description: "Olağanüstü misafir deneyimi yarat.", type: "müşteri_memnuniyeti", level: "platin", pointsRequired: 1000 },
+] as const;
+
+export async function initializeBadgeCatalog() {
+  console.log("Bootstrap: badge catalog initialization started.");
+
+  const existing = await db.select({ id: badges.id, name: badges.name }).from(badges);
+  console.log(`Bootstrap: existing badges: ${existing.length}`);
+
+  const existingNames = new Set(existing.map((badge) => badge.name));
+  const missingBadges = DEFAULT_BADGES.filter((badge) => !existingNames.has(badge.name));
+
+  if (missingBadges.length > 0) {
+    await db.insert(badges).values(missingBadges);
+    console.log(`Bootstrap: seeded ${missingBadges.length} missing default badges.`);
+  } else {
+    console.log("Bootstrap: no missing default badges found.");
+  }
+
+  const finalCount = await db.select({ id: badges.id }).from(badges);
+  console.log(`Bootstrap: badge catalog ready. Total badges: ${finalCount.length}`);
+}
+
 export async function bootstrapUsers() {
   const superadminUsername = process.env.SUPERADMIN_USERNAME?.trim();
   const superadminPassword = process.env.SUPERADMIN_PASSWORD;
@@ -117,4 +164,5 @@ export async function bootstrapUsers() {
       console.log(`Bootstrap: existing admin '${adminUsername}' configuration repaired.`);
     }
   }
+
 }
