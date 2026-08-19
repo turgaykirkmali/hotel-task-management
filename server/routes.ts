@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
+import crypto from "crypto";
 import { 
   insertRequestSchema, 
   insertEmployeeSchema, 
@@ -9,7 +10,8 @@ import {
   insertHotelSchema,
   statusTypes, 
   departments,
-  roleTypes
+  roleTypes,
+  users
 } from "@shared/schema";
 import { setupAuth, hashPassword } from "./auth";
 import { WebSocketServer } from "ws";
@@ -21,7 +23,8 @@ import {
   addTelegramUserMapping, 
   sendTaskAssignmentNotification, 
   getTelegramStatus,
-  setRequestUpdateCallback
+  setRequestUpdateCallback,
+  getTelegramBotUsername
 } from "./telegram";
 
 async function getSlaMinutes(hotelId: number | null | undefined, department: string, priority = "normal") {
@@ -66,6 +69,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Personele özel Telegram bağlantı linki
+  app.post("/api/users/:id/telegram-link", async (req: Request, res: Response) => {
+    try {
+      const currentUser = req.user;
+      const id = parseInt(req.params.id);
+      if (!currentUser || !["admin", "superadmin"].includes(currentUser.role)) return res.status(403).json({ message: "Yetkiniz yok" });
+      const target = await storage.getUser(id);
+      if (!target) return res.status(404).json({ message: "Kullanıcı bulunamadı" });
+      if (currentUser.role === "admin" && currentUser.hotelId !== target.hotelId) return res.status(403).json({ message: "Bu personel için işlem yapamazsınız" });
+      const token = crypto.randomBytes(24).toString("hex");
+      await db.update(users).set({ telegramLinkToken: token }).where(eq(users.id, id));
+      const botUsername = getTelegramBotUsername() || process.env.TELEGRAM_BOT_USERNAME;
+      if (!botUsername) return res.status(503).json({ message: "Telegram bot hazır değil veya bot kullanıcı adı bulunamadı" });
+      res.json({ link: `https://t.me/${botUsername}?start=link_${token}` });
+    } catch (error) {
+      console.error("Telegram link oluşturma hatası:", error);
+      res.status(500).json({ message: "Telegram bağlantı linki oluşturulamadı" });
+    }
+  });
+
   // Telegram kullanıcı eşleştirme endpoint
   app.post("/api/telegram-connect", async (req: Request, res: Response) => {
     try {
@@ -1234,26 +1257,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       
-      // Telegram kullanıcı adı değiştiyse
-      if (req.body.telegramUsername && req.body.telegramUsername !== userToUpdate.telegramUsername) {
-        try {
-          // Telegram eşleştirmesi için bir chat ID oluştur (simülasyon amaçlı)
-          const randomChatId = Math.floor(10000000 + Math.random() * 90000000);
-          
-          // Kullanıcı adını standartlaştır
-          let cleanUsername = req.body.telegramUsername;
-          if (cleanUsername.startsWith('@')) {
-            cleanUsername = cleanUsername.substring(1);
-          }
-          
-          // Kullanıcıyı Telegram eşleştirme sistemine ekle
-          addTelegramUserMapping(id, randomChatId, cleanUsername);
-          
-          console.log(`Telegram kullanıcı eşleştirmesi eklendi: ${id} => ${cleanUsername} (ChatID: ${randomChatId})`);
-        } catch (telegramError) {
-          console.error("Telegram kullanıcı eşleştirmesi eklenirken hata:", telegramError);
-          // Hata olsa bile işleme devam et
-        }
+      // Telegram kullanıcı adı yalnızca profil bilgisi olarak güncellenir.
+      // Gerçek chat ID sadece Telegram botundaki doğrulanmış /start veya /connect ile kaydedilir.
+      if (req.body.telegramUsername !== undefined) {
+        const cleanUsername = String(req.body.telegramUsername || '').replace('@', '').trim().toLowerCase() || null;
+        await db.update(users).set({ telegramUsername: cleanUsername }).where(eq(users.id, id));
       }
       
       // Şifre varsa hash'le

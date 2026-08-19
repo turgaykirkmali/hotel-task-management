@@ -4,11 +4,15 @@
  */
 import { Telegraf } from 'telegraf';
 import { storage } from './storage';
+import { db } from './db';
+import { users } from '@shared/schema';
+import { eq } from 'drizzle-orm';
 
 // Telegram Bot durumu
 type TelegramStatus = 'initializing' | 'authenticated' | 'ready' | 'disconnected' | 'error';
 let telegramStatus: TelegramStatus = 'initializing';
 let telegramBot: Telegraf | null = null;
+let telegramBotUsername: string | null = null;
 
 // Mesaj geçmişi ve kullanıcı-chat eşleştirmeleri için saklama alanı
 interface UserChatMapping {
@@ -55,12 +59,32 @@ export async function initializeTelegram(): Promise<boolean> {
     
     console.log("Telegram token bulundu, bot oluşturuluyor...");
     telegramBot = new Telegraf(botToken);
+    try {
+      const me = await telegramBot.telegram.getMe();
+      telegramBotUsername = me.username || null;
+      console.log(`[Telegram] Bot: @${telegramBotUsername || 'unknown'}`);
+    } catch (e) {
+      console.warn('[Telegram] Bot kullanıcı adı alınamadı.');
+    }
     
     console.log("Telegram bot komutları tanımlanıyor...");
     
-    telegramBot.start((ctx) => {
+    telegramBot.start(async (ctx) => {
       console.log(`Start komutu alındı: ${ctx.chat.id}`);
-      ctx.reply(WELCOME_MESSAGE);
+      try {
+        const payload = ctx.message.text.split(' ')[1] || '';
+        const token = payload.startsWith('link_') ? payload.slice(5) : '';
+        if (!token) { await ctx.reply(WELCOME_MESSAGE); return; }
+        const [dbUser] = await db.select().from(users).where(eq(users.telegramLinkToken, token)).limit(1);
+        if (!dbUser) { await ctx.reply('❌ Bu Telegram bağlantı linki geçersiz veya kullanılmış. Yönetici yeni bir link oluşturmalı.'); return; }
+        const telegramUsername = ctx.from?.username || '';
+        await db.update(users).set({ telegramChatId: String(ctx.chat.id), telegramUsername: telegramUsername || dbUser.telegramUsername || null, telegramLinkToken: null }).where(eq(users.id, dbUser.id));
+        addTelegramUserMapping(dbUser.id, ctx.chat.id, telegramUsername || dbUser.telegramUsername || '');
+        await ctx.reply(`✅ Bağlantı başarılı! ${dbUser.firstName || dbUser.username}, artık görev bildirimleri bu Telegram hesabına gönderilecek.`);
+      } catch (error) {
+        console.error('[Telegram] /start link hatası:', error);
+        await ctx.reply('❌ Telegram bağlantısı sırasında bir hata oluştu.');
+      }
     });
     
     telegramBot.help((ctx) => {
@@ -102,6 +126,10 @@ export async function initializeTelegram(): Promise<boolean> {
         console.log(`DB kullanıcısı bulundu: ${dbUser.username} (id:${dbUser.id}), Telegram: ${canonicalUsername}`);
       }
       
+      if (dbUser) {
+        await db.update(users).set({ telegramChatId: String(chatId), telegramUsername: (ctx.from?.username || dbUser.telegramUsername || canonicalUsername).replace('@', '').toLowerCase() }).where(eq(users.id, dbUser.id));
+      }
+
       const chatMapping = userChatMappings.find(m => m.telegramChatId === chatId);
       
       if (chatMapping) {
@@ -111,12 +139,12 @@ export async function initializeTelegram(): Promise<boolean> {
         return ctx.reply(`Bağlantı güncellendi! '${dbUser?.firstName || userCode}' hesabına ait görev bildirimleri bu sohbete gönderilecek.`);
       }
       
-      const userId = canonicalUserId ?? Math.floor(1000 + Math.random() * 9000);
-      userChatMappings.push({ userId, telegramChatId: chatId, telegramUsername: canonicalUsername, lastActive: new Date() });
-      
-      console.log(`Yeni eşleştirme eklendi: ChatID=${chatId}, UserID=${userId}, Username=${canonicalUsername}`);
-      const displayName = dbUser ? `${dbUser.firstName} ${dbUser.lastName}` : userCode;
-      ctx.reply(`✅ Bağlantı başarılı! Merhaba *${displayName}* — görev bildirimleri artık bu sohbete gelecek.`, { parse_mode: 'Markdown' });
+      if (!dbUser) {
+        return ctx.reply('❌ Kullanıcı bulunamadı. Yönetici tarafından oluşturulan Telegram bağlantı linkini kullanın.');
+      }
+      console.log(`Yeni eşleştirme eklendi: ChatID=${chatId}, UserID=${dbUser.id}, Username=${canonicalUsername}`);
+      const displayName = `${dbUser.firstName || ''} ${dbUser.lastName || ''}`.trim() || dbUser.username;
+      await ctx.reply(`✅ Bağlantı başarılı! Merhaba *${displayName}* — görev bildirimleri artık bu Telegram hesabına gönderilecek.`, { parse_mode: 'Markdown' });
     });
 
     // =============================================
@@ -125,6 +153,8 @@ export async function initializeTelegram(): Promise<boolean> {
 
     // Yardımcı: chatId'den DB'deki gerçek kullanıcıyı bul
     async function resolveDbUser(chatId: number) {
+      const [directUser] = await db.select().from(users).where(eq(users.telegramChatId, String(chatId))).limit(1);
+      if (directUser) return directUser;
       const mapping = userChatMappings.find(m => m.telegramChatId === chatId);
       if (!mapping) return null;
       // Önce telegramUsername ile DB'de ara
@@ -357,33 +387,9 @@ export async function initializeTelegram(): Promise<boolean> {
       console.error(`Telegram bot hatası: ${err}`);
     });
     
-    // Kullanıcı eşleştirmelerini LAUNCH'DAN ÖNCE doldur
-    // (telegramBot.launch() hiç resolve olmayan bir Promise olduğu için
-    //  await edilirse altındaki kod asla çalışmaz)
+    // Eşleştirmeler artık database'de kalıcı tutulur; hardcoded chat ID kullanılmaz.
     userChatMappings = [];
-    
-    userChatMappings.push({
-      userId: 1,
-      telegramChatId: 12345678,
-      telegramUsername: 'test_user',
-      lastActive: new Date()
-    });
-    
-    userChatMappings.push({
-      userId: 25,
-      telegramChatId: 6065420180,
-      telegramUsername: 'turgaykirkmali',
-      lastActive: new Date()
-    });
-    
-    userChatMappings.push({
-      userId: 20,
-      telegramChatId: 7146312544,
-      telegramUsername: 'gulcankirkmali',
-      lastActive: new Date()
-    });
-    
-    console.log('Aktif kullanıcı eşleştirmeleri:', userChatMappings);
+    console.log('Telegram kullanıcı eşleştirmeleri database üzerinden yönetilecek.');
     
     console.log("Telegram bot başlatılıyor...");
     
@@ -462,11 +468,9 @@ export async function sendTaskAssignmentNotification(
 
     // Chat ID'yi bul
     const cleanUsername = telegramUsername.replace('@', '').toLowerCase();
-    const userMapping = userChatMappings.find(
-      m => m.telegramUsername.toLowerCase() === cleanUsername
-    );
-
-    const chatId = userMapping?.telegramChatId || null;
+    const [dbTarget] = await db.select().from(users).where(eq(users.telegramUsername, cleanUsername)).limit(1);
+    const userMapping = userChatMappings.find(m => m.userId === dbTarget?.id || m.telegramUsername.toLowerCase() === cleanUsername);
+    const chatId = dbTarget?.telegramChatId ? Number(dbTarget.telegramChatId) : (userMapping?.telegramChatId || null);
 
     if (!chatId || !process.env.TELEGRAM_BOT_TOKEN) {
       console.log(`[Telegram] ChatID bulunamadı veya token yok: ${telegramUsername}`);
@@ -525,6 +529,8 @@ export async function sendTaskAssignmentNotification(
  */
 export async function sendTelegramByUsername(telegramUsername: string, message: string): Promise<boolean> {
   const cleanUsername = telegramUsername.replace('@', '').toLowerCase();
+  const [dbUser] = await db.select().from(users).where(eq(users.telegramUsername, cleanUsername)).limit(1);
+  if (dbUser?.telegramChatId) return sendTelegramMessage(Number(dbUser.telegramChatId), message);
   const userMapping = userChatMappings.find(m => m.telegramUsername.toLowerCase() === cleanUsername);
   
   if (!userMapping) {
@@ -553,6 +559,8 @@ export function isTelegramReady(): boolean {
 /**
  * Kullanıcı-Telegram bağlantısı ekler
  */
+export function getTelegramBotUsername(): string | null { return telegramBotUsername; }
+
 export function addTelegramUserMapping(userId: number, chatId: number, telegramUsername: string): void {
   const existing = userChatMappings.find(
     m => m.userId === userId || m.telegramChatId === chatId || m.telegramUsername === telegramUsername

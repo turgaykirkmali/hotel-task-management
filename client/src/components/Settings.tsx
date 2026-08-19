@@ -1744,6 +1744,25 @@ export default function Settings({ currentHotelId: hotelIdFromProps }: SettingsP
                                   </DialogContent>
                                 </Dialog>
                                 
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={async () => {
+                                    try {
+                                      const response = await fetch(`/api/users/${user.id}/telegram-link`, { method: 'POST' });
+                                      const data = await response.json();
+                                      if (!response.ok) throw new Error(data.message || 'Telegram bağlantısı oluşturulamadı');
+                                      try { await navigator.clipboard.writeText(data.link); } catch {}
+                                      window.open(data.link, '_blank');
+                                      toast({ title: 'Telegram bağlantısı hazır', description: 'Personel Telegram bağlantısını açıp Başlat düğmesine basmalı.' });
+                                    } catch (error: any) {
+                                      toast({ title: 'Telegram bağlantı hatası', description: error.message, variant: 'destructive' });
+                                    }
+                                  }}
+                                >
+                                  Telegram Bağla
+                                </Button>
+
                                 <Button 
                                   variant="destructive" 
                                   size="sm"
