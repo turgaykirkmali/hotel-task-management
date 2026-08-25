@@ -307,6 +307,16 @@ export default function HotelRequestSystem() {
             <OperationsCenter hotelId={selectedHotelId || userData?.hotelId || undefined} />
           )}
 
+          {activeTab === "integrations" && (
+            <Integrations hotelId={selectedHotelId || userData?.hotelId || undefined} />
+          )}
+          {activeTab === "reviews" && (
+            <ReviewTracker hotelId={selectedHotelId || userData?.hotelId || undefined} />
+          )}
+          {activeTab === "inventory" && (
+            <InventoryCenter hotelId={selectedHotelId || userData?.hotelId || undefined} userRole={userRole} />
+          )}
+
           {activeTab === "reports" && (
             <Reports 
               requests={requests} 

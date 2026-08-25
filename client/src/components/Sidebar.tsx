@@ -1,4 +1,4 @@
-import { Home, ClipboardList, FileText, Settings, Bell, PlusCircle, LogOut, Building2, ChevronDown, SmilePlus, ShoppingBag, Trophy, BarChart3 } from 'lucide-react';
+import { Home, ClipboardList, FileText, Settings, Bell, PlusCircle, LogOut, Building2, ChevronDown, SmilePlus, ShoppingBag, Trophy, BarChart3, PlugZap, MessageSquareText, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { 
   Select, 
@@ -159,6 +159,10 @@ export default function Sidebar({
             <BarChart3 className="h-5 w-5 mr-3" />
             Operasyon Merkezi
           </button>
+
+          <button className={`flex items-center w-full px-4 py-2 text-sm font-medium rounded-md ${activeTab === "integrations" ? "bg-primary/10 text-primary" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`} onClick={() => handleTabClick("integrations")}><PlugZap className="h-5 w-5 mr-3" />Entegrasyonlar</button>
+          <button className={`flex items-center w-full px-4 py-2 text-sm font-medium rounded-md ${activeTab === "reviews" ? "bg-primary/10 text-primary" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`} onClick={() => handleTabClick("reviews")}><MessageSquareText className="h-5 w-5 mr-3" />Review Tracker</button>
+          <button className={`flex items-center w-full px-4 py-2 text-sm font-medium rounded-md ${activeTab === "inventory" ? "bg-primary/10 text-primary" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`} onClick={() => handleTabClick("inventory")}><Package className="h-5 w-5 mr-3" />Stok Yönetimi</button>
 
           <button 
             className={`flex items-center w-full px-4 py-2 text-sm font-medium rounded-md ${activeTab === "reports" ? "bg-primary/10 text-primary" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`}
