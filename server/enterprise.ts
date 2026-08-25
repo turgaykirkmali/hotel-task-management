@@ -35,6 +35,8 @@ export async function initializeEnterpriseSchema() {
     `ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS image_url TEXT`,
     `ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS inventory_group TEXT`,
     `ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS preferred_store_id INTEGER REFERENCES inventory_stores(id)`,
+    `CREATE TABLE IF NOT EXISTS inventory_item_stores (id SERIAL PRIMARY KEY, hotel_id INTEGER NOT NULL REFERENCES hotels(id), item_id INTEGER NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE, store_id INTEGER NOT NULL REFERENCES inventory_stores(id) ON DELETE CASCADE, created_at TIMESTAMP NOT NULL DEFAULT NOW(), UNIQUE(hotel_id,item_id,store_id))`,
+    `CREATE INDEX IF NOT EXISTS idx_inventory_item_stores_item ON inventory_item_stores(hotel_id,item_id,store_id)`,
     `ALTER TABLE stock_transactions ADD COLUMN IF NOT EXISTS document_no TEXT`,
     `ALTER TABLE stock_transactions ADD COLUMN IF NOT EXISTS transaction_unit TEXT`,
     `ALTER TABLE stock_transactions ADD COLUMN IF NOT EXISTS destination_store_id INTEGER REFERENCES inventory_stores(id)`,
@@ -60,7 +62,12 @@ export async function initializeEnterpriseSchema() {
     const stores = [['Ana Depo','ANA'],['F&B Depo','FB'],['Mutfak Depo','MUTFAK'],['FO Depo','FO']];
     for (const [name, code] of stores) await pool.query(`INSERT INTO inventory_stores(hotel_id,name,code) VALUES($1,$2,$3) ON CONFLICT(hotel_id,code) DO NOTHING`, [h.id,name,code]);
   }
-  console.log('Bootstrap: enterprise schema verified (integrations, reviews, inventory, recipes).');
+  for (const h of hotels) {
+    await pool.query(`INSERT INTO inventory_item_stores(hotel_id,item_id,store_id)
+      SELECT i.hotel_id,i.id,s.id FROM inventory_items i JOIN inventory_stores s ON s.hotel_id=i.hotel_id AND s.active=true
+      WHERE i.hotel_id=$1 AND NOT EXISTS (SELECT 1 FROM inventory_item_stores x WHERE x.item_id=i.id AND x.hotel_id=i.hotel_id)`, [h.id]);
+  }
+  console.log('Bootstrap: enterprise schema verified (integrations, reviews, inventory, recipes, stock cards).');
 }
 
 export async function getIntegration(hotelId: number, channel: string) {
@@ -166,7 +173,7 @@ export async function notifyPurchasingAndStorekeepers(hotelId:number, text:strin
 
 export async function getInventorySnapshot(hotelId:number, storeId?:number) {
   const params:any[]=[hotelId]; let storeFilter=''; if(storeId){params.push(storeId);storeFilter=` AND t.store_id=$${params.length}`;}
-  const { rows }=await pool.query(`SELECT i.id,i.sku,i.name,i.category,i.image_url,i.unit,i.min_stock,i.par_stock,i.cost,COALESCE(SUM(t.quantity),0) AS stock FROM inventory_items i LEFT JOIN stock_transactions t ON t.item_id=i.id AND t.hotel_id=i.hotel_id ${storeFilter} WHERE i.hotel_id=$1 AND i.active=true GROUP BY i.id ORDER BY i.name`,params); return rows;
+  const { rows }=await pool.query(`SELECT i.id,i.sku,i.name,i.category,i.image_url,i.unit,i.min_stock,i.par_stock,i.cost,COALESCE(SUM(t.quantity),0) AS stock FROM inventory_items i LEFT JOIN stock_transactions t ON t.item_id=i.id AND t.hotel_id=i.hotel_id ${storeFilter} WHERE i.hotel_id=$1 AND i.active=true AND EXISTS (SELECT 1 FROM inventory_item_stores map WHERE map.item_id=i.id AND map.hotel_id=i.hotel_id ${storeId?`AND map.store_id=$${params.length}`:''}) GROUP BY i.id ORDER BY i.name`,params); return rows;
 }
 
 export async function consumeRecipe(hotelId:number, recipeId:number, yieldQty:number, userId?:number, storeId?:number) {
