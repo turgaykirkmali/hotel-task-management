@@ -187,7 +187,7 @@ export const reportTypes = ["daily", "weekly", "monthly"] as const;
 export type ReportType = typeof reportTypes[number];
 
 // Department types
-export const departments = ["Kat Hizmetleri", "Resepsiyon", "Teknik Servis", "Restoran", "Güvenlik"] as const;
+export const departments = ["Kat Hizmetleri", "Resepsiyon", "Teknik Servis", "Restoran", "Güvenlik", "Satınalma", "Depo"] as const;
 export type Department = typeof departments[number];
 
 // Rozet türleri

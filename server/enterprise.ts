@@ -30,6 +30,12 @@ export async function initializeEnterpriseSchema() {
     `CREATE TABLE IF NOT EXISTS inventory_stores (id SERIAL PRIMARY KEY, hotel_id INTEGER NOT NULL REFERENCES hotels(id), name TEXT NOT NULL, code TEXT NOT NULL, storekeeper_user_id INTEGER REFERENCES users(id), active BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMP NOT NULL DEFAULT NOW(), UNIQUE(hotel_id, code))`,
     `CREATE TABLE IF NOT EXISTS inventory_items (id SERIAL PRIMARY KEY, hotel_id INTEGER NOT NULL REFERENCES hotels(id), sku TEXT NOT NULL, name TEXT NOT NULL, category TEXT, unit TEXT NOT NULL DEFAULT 'adet', min_stock NUMERIC(14,3) NOT NULL DEFAULT 0, par_stock NUMERIC(14,3) NOT NULL DEFAULT 0, cost NUMERIC(14,4) NOT NULL DEFAULT 0, active BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMP NOT NULL DEFAULT NOW(), UNIQUE(hotel_id, sku))`,
     `CREATE TABLE IF NOT EXISTS stock_transactions (id SERIAL PRIMARY KEY, hotel_id INTEGER NOT NULL REFERENCES hotels(id), store_id INTEGER NOT NULL REFERENCES inventory_stores(id), item_id INTEGER NOT NULL REFERENCES inventory_items(id), type TEXT NOT NULL, quantity NUMERIC(14,3) NOT NULL, unit_cost NUMERIC(14,4), reference_type TEXT, reference_id INTEGER, note TEXT, user_id INTEGER REFERENCES users(id), created_at TIMESTAMP NOT NULL DEFAULT NOW())`,
+    `ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS barcode TEXT`,
+    `ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS inventory_group TEXT`,
+    `ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS preferred_store_id INTEGER REFERENCES inventory_stores(id)`,
+    `ALTER TABLE stock_transactions ADD COLUMN IF NOT EXISTS document_no TEXT`,
+    `ALTER TABLE stock_transactions ADD COLUMN IF NOT EXISTS destination_store_id INTEGER REFERENCES inventory_stores(id)`,
+    `CREATE INDEX IF NOT EXISTS idx_stock_transactions_store_item ON stock_transactions(store_id,item_id,created_at)`,
     `CREATE TABLE IF NOT EXISTS inventory_requests (id SERIAL PRIMARY KEY, hotel_id INTEGER NOT NULL REFERENCES hotels(id), request_no TEXT NOT NULL, requester_id INTEGER REFERENCES users(id), department TEXT, type TEXT NOT NULL DEFAULT 'issue', status TEXT NOT NULL DEFAULT 'pending', notes TEXT, approved_by INTEGER REFERENCES users(id), created_at TIMESTAMP NOT NULL DEFAULT NOW(), approved_at TIMESTAMP, UNIQUE(hotel_id, request_no))`,
     `CREATE TABLE IF NOT EXISTS inventory_request_items (id SERIAL PRIMARY KEY, request_id INTEGER NOT NULL REFERENCES inventory_requests(id) ON DELETE CASCADE, item_id INTEGER NOT NULL REFERENCES inventory_items(id), quantity NUMERIC(14,3) NOT NULL, unit TEXT NOT NULL)`,
     `CREATE TABLE IF NOT EXISTS recipes (id SERIAL PRIMARY KEY, hotel_id INTEGER NOT NULL REFERENCES hotels(id), name TEXT NOT NULL, category TEXT, selling_price NUMERIC(14,2) NOT NULL DEFAULT 0, yield_qty NUMERIC(14,3) NOT NULL DEFAULT 1, active BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMP NOT NULL DEFAULT NOW(), UNIQUE(hotel_id, name))`,
@@ -41,7 +47,14 @@ export async function initializeEnterpriseSchema() {
   ];
   for (const statement of statements) await pool.query(statement);
   const hotels = (await pool.query('SELECT id FROM hotels')).rows;
-  for (const h of hotels) { await pool.query(`INSERT INTO inventory_stores(hotel_id,name,code) VALUES($1,'Main Store','MAIN') ON CONFLICT(hotel_id,code) DO NOTHING`, [h.id]); }
+  for (const h of hotels) {
+    const legacy = (await pool.query(`SELECT id FROM inventory_stores WHERE hotel_id=$1 AND code='MAIN' LIMIT 1`, [h.id])).rows[0];
+    const ana = (await pool.query(`SELECT id FROM inventory_stores WHERE hotel_id=$1 AND code='ANA' LIMIT 1`, [h.id])).rows[0];
+    if (legacy && !ana) await pool.query(`UPDATE inventory_stores SET name='Ana Depo',code='ANA' WHERE id=$1`, [legacy.id]);
+    if (legacy && ana) await pool.query(`UPDATE inventory_stores SET active=false,name='Legacy Main Store' WHERE id=$1`, [legacy.id]);
+    const stores = [['Ana Depo','ANA'],['F&B Depo','FB'],['Mutfak Depo','MUTFAK'],['FO Depo','FO']];
+    for (const [name, code] of stores) await pool.query(`INSERT INTO inventory_stores(hotel_id,name,code) VALUES($1,$2,$3) ON CONFLICT(hotel_id,code) DO NOTHING`, [h.id,name,code]);
+  }
   console.log('Bootstrap: enterprise schema verified (integrations, reviews, inventory, recipes).');
 }
 

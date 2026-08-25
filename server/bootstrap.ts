@@ -46,7 +46,9 @@ export async function initializeOperationsSchema() {
     `CREATE INDEX IF NOT EXISTS idx_sla_policies_hotel ON sla_policies(hotel_id)`,
     `CREATE INDEX IF NOT EXISTS idx_audit_logs_hotel_created ON audit_logs(hotel_id, created_at)`,
     `CREATE INDEX IF NOT EXISTS idx_audit_logs_request ON audit_logs(request_id)`,
-    `CREATE INDEX IF NOT EXISTS idx_room_statuses_hotel_room ON room_statuses(hotel_id, room_number)`
+    `CREATE INDEX IF NOT EXISTS idx_room_statuses_hotel_room ON room_statuses(hotel_id, room_number)`,
+    `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS action_at TIMESTAMP`,
+    `UPDATE audit_logs SET action_at = created_at WHERE action_at IS NULL`
   ];
 
   for (const sql of statements) {
@@ -66,6 +68,8 @@ async function seedDefaultSlaPolicies(hotelId: number) {
     "Teknik Servis": { low: 60, normal: 30, high: 15 },
     "Restoran": { low: 30, normal: 15, high: 10 },
     "Güvenlik": { low: 20, normal: 10, high: 5 },
+    "Satınalma": { low: 120, normal: 60, high: 30 },
+    "Depo": { low: 60, normal: 30, high: 15 },
   };
   for (const department of departments) {
     for (const priority of ["low", "normal", "high"] as const) {
@@ -188,7 +192,7 @@ export async function bootstrapUsers() {
     console.log(`Bootstrap: default hotel created (id=${adminHotelId}).`);
   }
 
-  await pool.query(`INSERT INTO inventory_stores(hotel_id,name,code) VALUES($1,'Main Store','MAIN') ON CONFLICT(hotel_id,code) DO NOTHING`, [adminHotelId]);
+  for (const [name, code] of [['Ana Depo','ANA'],['F&B Depo','FB'],['Mutfak Depo','MUTFAK'],['FO Depo','FO']]) { await pool.query(`INSERT INTO inventory_stores(hotel_id,name,code) VALUES($1,$2,$3) ON CONFLICT(hotel_id,code) DO NOTHING`, [adminHotelId,name,code]); }
   await seedDefaultSlaPolicies(adminHotelId);
 
   const existingSuperadmin = await db.select().from(users).where(eq(users.username, superadminUsername)).limit(1);
