@@ -33,3 +33,7 @@ services:
         sync: false
       - key: SENDGRID_API_KEY
         sync: false
+      - key: SENDGRID_FROM_EMAIL
+        sync: false
+      - key: APP_ENCRYPTION_KEY
+        sync: false

@@ -82,3 +82,23 @@ Optional:
 - `BOOTSTRAP_HOTEL_NAME`
 
 The build command must run `npm ci && npm run db:push && npm run build`. The application now fails fast if bootstrap credentials are missing instead of silently skipping user creation.
+
+## v11 Enterprise Modules
+
+New modules are initialized automatically at startup:
+- Integrations: SendGrid email, Twilio SMS/WhatsApp, Meta Instagram DM, existing Telegram workflow
+- Review Tracker: review storage, NPS, response rate, source performance and performance score
+- Inventory: material master, stores, stock movements, stock requests, audit trail and Telegram notifications
+- Recipes: F&B recipe cards and automatic ingredient stock consumption
+
+Required Render environment variable for encrypted integration secrets:
+- `APP_ENCRYPTION_KEY` — use a long random value and keep it secret.
+
+Recommended deliverability setup:
+- SendGrid: verify sender/domain and configure SPF/DKIM before production sending.
+- WhatsApp: use explicit opt-in and approved WhatsApp templates for business-initiated messages.
+- SMS/Instagram: use consent and suppression controls; do not use the platform for unsolicited bulk messaging.
+
+For Instagram webhook, configure Meta to call:
+`https://YOUR-DOMAIN/api/integrations/instagram/webhook?hotelId=HOTEL_ID`
+using the Verify Token stored in the Integrations menu.
