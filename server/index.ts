@@ -6,7 +6,7 @@ import { initializeTelegram } from "./telegram";
 import { bootstrapUsers, initializeBadgeCatalog, initializeOperationsSchema } from "./bootstrap";
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: false }));
 
 app.use((req, res, next) => {

@@ -102,3 +102,8 @@ Recommended deliverability setup:
 For Instagram webhook, configure Meta to call:
 `https://YOUR-DOMAIN/api/integrations/instagram/webhook?hotelId=HOTEL_ID`
 using the Verify Token stored in the Integrations menu.
+
+## v11.3 Inventory improvements
+The application bootstrap automatically adds `inventory_items.image_url` and `stock_transactions.transaction_unit`. No manual migration is normally required.
+
+Inventory movement and stock adjustment APIs enforce that only users whose department is Satınalma or Depo/Depocu can edit stock balances. Admin/Superadmin can assign a Depo user to each store.

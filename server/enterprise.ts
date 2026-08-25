@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { pool } from './db';
+import { convertToBase } from './inventoryUnits';
 import { sendTelegramMessage } from './telegram';
 
 const KEY = crypto.createHash('sha256').update(process.env.APP_ENCRYPTION_KEY || process.env.SESSION_SECRET || 'hotel-ops-default-key').digest();
@@ -31,9 +32,11 @@ export async function initializeEnterpriseSchema() {
     `CREATE TABLE IF NOT EXISTS inventory_items (id SERIAL PRIMARY KEY, hotel_id INTEGER NOT NULL REFERENCES hotels(id), sku TEXT NOT NULL, name TEXT NOT NULL, category TEXT, unit TEXT NOT NULL DEFAULT 'adet', min_stock NUMERIC(14,3) NOT NULL DEFAULT 0, par_stock NUMERIC(14,3) NOT NULL DEFAULT 0, cost NUMERIC(14,4) NOT NULL DEFAULT 0, active BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMP NOT NULL DEFAULT NOW(), UNIQUE(hotel_id, sku))`,
     `CREATE TABLE IF NOT EXISTS stock_transactions (id SERIAL PRIMARY KEY, hotel_id INTEGER NOT NULL REFERENCES hotels(id), store_id INTEGER NOT NULL REFERENCES inventory_stores(id), item_id INTEGER NOT NULL REFERENCES inventory_items(id), type TEXT NOT NULL, quantity NUMERIC(14,3) NOT NULL, unit_cost NUMERIC(14,4), reference_type TEXT, reference_id INTEGER, note TEXT, user_id INTEGER REFERENCES users(id), created_at TIMESTAMP NOT NULL DEFAULT NOW())`,
     `ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS barcode TEXT`,
+    `ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS image_url TEXT`,
     `ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS inventory_group TEXT`,
     `ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS preferred_store_id INTEGER REFERENCES inventory_stores(id)`,
     `ALTER TABLE stock_transactions ADD COLUMN IF NOT EXISTS document_no TEXT`,
+    `ALTER TABLE stock_transactions ADD COLUMN IF NOT EXISTS transaction_unit TEXT`,
     `ALTER TABLE stock_transactions ADD COLUMN IF NOT EXISTS destination_store_id INTEGER REFERENCES inventory_stores(id)`,
     `CREATE INDEX IF NOT EXISTS idx_stock_transactions_store_item ON stock_transactions(store_id,item_id,created_at)`,
     `CREATE TABLE IF NOT EXISTS inventory_requests (id SERIAL PRIMARY KEY, hotel_id INTEGER NOT NULL REFERENCES hotels(id), request_no TEXT NOT NULL, requester_id INTEGER REFERENCES users(id), department TEXT, type TEXT NOT NULL DEFAULT 'issue', status TEXT NOT NULL DEFAULT 'pending', notes TEXT, approved_by INTEGER REFERENCES users(id), created_at TIMESTAMP NOT NULL DEFAULT NOW(), approved_at TIMESTAMP, UNIQUE(hotel_id, request_no))`,
@@ -161,7 +164,7 @@ export async function notifyPurchasingAndStorekeepers(hotelId:number, text:strin
 
 export async function getInventorySnapshot(hotelId:number, storeId?:number) {
   const params:any[]=[hotelId]; let storeFilter=''; if(storeId){params.push(storeId);storeFilter=` AND t.store_id=$${params.length}`;}
-  const { rows }=await pool.query(`SELECT i.id,i.sku,i.name,i.category,i.unit,i.min_stock,i.par_stock,i.cost,COALESCE(SUM(t.quantity),0) AS stock FROM inventory_items i LEFT JOIN stock_transactions t ON t.item_id=i.id AND t.hotel_id=i.hotel_id ${storeFilter} WHERE i.hotel_id=$1 AND i.active=true GROUP BY i.id ORDER BY i.name`,params); return rows;
+  const { rows }=await pool.query(`SELECT i.id,i.sku,i.name,i.category,i.image_url,i.unit,i.min_stock,i.par_stock,i.cost,COALESCE(SUM(t.quantity),0) AS stock FROM inventory_items i LEFT JOIN stock_transactions t ON t.item_id=i.id AND t.hotel_id=i.hotel_id ${storeFilter} WHERE i.hotel_id=$1 AND i.active=true GROUP BY i.id ORDER BY i.name`,params); return rows;
 }
 
 export async function consumeRecipe(hotelId:number, recipeId:number, yieldQty:number, userId?:number, storeId?:number) {
@@ -170,7 +173,7 @@ export async function consumeRecipe(hotelId:number, recipeId:number, yieldQty:nu
     const recipe=(await client.query('SELECT * FROM recipes WHERE id=$1 AND hotel_id=$2',[recipeId,hotelId])).rows[0]; if(!recipe) throw new Error('Recipe not found');
     const store=storeId ? (await client.query('SELECT id FROM inventory_stores WHERE id=$1 AND hotel_id=$2',[storeId,hotelId])).rows[0] : (await client.query('SELECT id FROM inventory_stores WHERE hotel_id=$1 AND active=true ORDER BY id LIMIT 1',[hotelId])).rows[0]; if(!store) throw new Error('Active store not found');
     const items=(await client.query('SELECT * FROM recipe_items WHERE recipe_id=$1',[recipeId])).rows;
-    for(const item of items){ const qty=Number(item.quantity)*Number(yieldQty)/Math.max(Number(recipe.yield_qty)||1,1); await client.query(`INSERT INTO stock_transactions(hotel_id,store_id,item_id,type,quantity,reference_type,reference_id,note,user_id) VALUES($1,$2,$3,'recipe_consumption',$4,'recipe',$5,$6,$7)`,[hotelId,store.id,item.item_id,-qty,recipeId,`Recipe consumption: ${recipe.name}`,userId||null]); }
+    for(const item of items){ const inv=(await client.query('SELECT unit FROM inventory_items WHERE id=$1 AND hotel_id=$2',[item.item_id,hotelId])).rows[0]; if(!inv) throw new Error('Reçete malzemesi bulunamadı'); const baseQty=convertToBase(Number(item.quantity), String(item.unit||inv.unit), String(inv.unit)); const qty=baseQty*Number(yieldQty)/Math.max(Number(recipe.yield_qty)||1,1); const balance=Number((await client.query('SELECT COALESCE(SUM(quantity),0) stock FROM stock_transactions WHERE hotel_id=$1 AND store_id=$2 AND item_id=$3',[hotelId,store.id,item.item_id])).rows[0].stock); if(balance<qty) throw new Error(`${item.item_id} için yetersiz stok. Mevcut: ${balance} ${inv.unit}`); await client.query(`INSERT INTO stock_transactions(hotel_id,store_id,item_id,type,quantity,transaction_unit,reference_type,reference_id,note,user_id) VALUES($1,$2,$3,'recipe_consumption',$4,$5,'recipe',$6,$7,$8)`,[hotelId,store.id,item.item_id,-qty,inv.unit,recipeId,`Recipe consumption: ${recipe.name}`,userId||null]); }
     await client.query('COMMIT'); return true;
   } catch(e){await client.query('ROLLBACK');throw e;} finally{client.release();}
 }
