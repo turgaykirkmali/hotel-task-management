@@ -1,6 +1,7 @@
 import { MailService } from '@sendgrid/mail';
 import { Request } from '@shared/schema';
 import { storage } from './storage';
+import { dispatchConfiguredNotifications } from './enterprise';
 
 // SendGrid e-posta servisi
 let mailService: MailService | null = null;
@@ -125,7 +126,10 @@ export async function notifyNewRequest(request: Request): Promise<void> {
   `;
   
   await notifyDepartmentManagers(request.hotelId, request.department, subject, htmlContent);
+  const users = (await storage.getUsersByHotelId(request.hotelId)).filter((u:any) => u.department === request.department || u.role === 'admin' || u.role === 'superadmin');
+  await dispatchConfiguredNotifications(request.hotelId, users, subject, `${request.roomNumber} / ${request.department}: ${request.request}`, htmlContent);
 }
+
 
 // Durum değişikliği bildirimi
 export async function notifyStatusUpdate(request: Request, oldStatus: string): Promise<void> {
@@ -143,6 +147,8 @@ export async function notifyStatusUpdate(request: Request, oldStatus: string): P
   `;
   
   await notifyDepartmentManagers(request.hotelId, request.department, subject, htmlContent);
+  const users = (await storage.getUsersByHotelId(request.hotelId)).filter((u:any) => u.department === request.department || u.role === 'admin' || u.role === 'superadmin');
+  await dispatchConfiguredNotifications(request.hotelId, users, subject, `${request.roomNumber} / ${request.department}: ${request.status}`, htmlContent);
 }
 
 // Geciken istek bildirimi
@@ -168,4 +174,6 @@ export async function notifyOverdueRequest(request: Request): Promise<void> {
     .filter(user => user.role === 'admin' || user.role === 'superadmin');
   
   await sendNotificationsToUsers(adminUsers, subject, htmlContent);
+  const allUsers = (await storage.getUsersByHotelId(request.hotelId)).filter((u:any) => u.department === request.department || u.role === 'admin' || u.role === 'superadmin');
+  await dispatchConfiguredNotifications(request.hotelId, allUsers, subject, `GECİKEN: ${request.roomNumber} / ${request.department}: ${request.request}`, htmlContent);
 }

@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { db, pool } from "./db";
 import { badges, hotels, users, slaPolicies, departments } from "@shared/schema";
 import { hashPassword } from "./auth";
+import { initializeEnterpriseSchema } from "./enterprise";
 
 export async function initializeOperationsSchema() {
   console.log("Bootstrap: verifying operations database schema...");
@@ -52,7 +53,8 @@ export async function initializeOperationsSchema() {
     await pool.query(sql);
   }
 
-  console.log("Bootstrap: operations database schema verified (SLA, audit, room status, request SLA fields).");
+  await initializeEnterpriseSchema();
+  console.log("Bootstrap: operations database schema verified (SLA, audit, room status, request SLA fields, enterprise modules).");
 }
 
 async function seedDefaultSlaPolicies(hotelId: number) {
@@ -186,6 +188,7 @@ export async function bootstrapUsers() {
     console.log(`Bootstrap: default hotel created (id=${adminHotelId}).`);
   }
 
+  await pool.query(`INSERT INTO inventory_stores(hotel_id,name,code) VALUES($1,'Main Store','MAIN') ON CONFLICT(hotel_id,code) DO NOTHING`, [adminHotelId]);
   await seedDefaultSlaPolicies(adminHotelId);
 
   const existingSuperadmin = await db.select().from(users).where(eq(users.username, superadminUsername)).limit(1);
