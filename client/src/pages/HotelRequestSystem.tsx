@@ -18,6 +18,9 @@ import MoodBoard from '@/components/MoodBoard';
 import Badges from '@/components/Badges';
 import BadgeManagement from '@/components/BadgeManagement';
 import NotificationPopover from '@/components/NotificationPopover';
+import Integrations from '@/components/Integrations';
+import ReviewTracker from '@/components/ReviewTracker';
+import InventoryCenter from '@/components/InventoryCenter';
 import { Request, ReportType, StatusType } from '@shared/schema';
 
 export default function HotelRequestSystem() {
@@ -181,6 +184,9 @@ export default function HotelRequestSystem() {
       operations: 'Operasyon Merkezi',
       'mood-board': 'Duygu Durumu Panosu',
       badges: 'Rozetler',
+      integrations: 'Entegrasyonlar',
+      reviews: 'Review Tracker',
+      inventory: 'Stok Yönetimi',
       settings: 'Ayarlar'
     };
     
