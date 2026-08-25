@@ -144,77 +144,61 @@ export default function Reports({ requests, reportType, setReportType, loading }
     return `${hours} saat ${minutes > 0 ? `${minutes} dakika` : ''}`;
   };
 
-  // Handle downloadPDF - Generate a PDF report
+  // Generate a detailed multi-page PDF: summary + department analysis + every request.
   const downloadPDF = () => {
     try {
-      // Initialize jsPDF
-      const doc = new jsPDF();
-      
-      // Add report title
-      const reportTypeText = isCustomDateRange 
-        ? `Özel Rapor (${dateRange.startDate ? format(dateRange.startDate, "dd.MM.yyyy", { locale: tr }) : ""} - ${dateRange.endDate ? format(dateRange.endDate, "dd.MM.yyyy", { locale: tr }) : ""})`
-        : reportType === "daily" 
-          ? "Günlük Rapor" 
-          : reportType === "weekly" 
-            ? "Haftalık Rapor" 
-            : "Aylık Rapor";
-      
-      doc.setFontSize(18);
-      doc.text("Otel İstek Raporu", 14, 20);
-      
-      doc.setFontSize(12);
-      doc.text(reportTypeText, 14, 30);
-      doc.text(`Oluşturulma Tarihi: ${format(new Date(), "dd.MM.yyyy", { locale: tr })}`, 14, 37);
-      
-      // Add statistics summary
-      doc.setFontSize(14);
-      doc.text("İstek Durumu Özeti", 14, 50);
-      
-      doc.setFontSize(10);
-      doc.text(`Toplam İstek: ${stats.total}`, 14, 60);
-      doc.text(`Tamamlanan: ${stats.completed}`, 14, 67);
-      doc.text(`İşlemde: ${stats.inProgress}`, 14, 74);
-      doc.text(`Beklemede: ${stats.pending}`, 14, 81);
-      doc.text(`Geciken: ${stats.delayed}`, 14, 88);
-      
-      // Add department table
-      doc.setFontSize(14);
-      doc.text("Departman Bazlı Analiz", 14, 105);
-      
-      // Department table
-      const departmentTableData = departments.map(dept => {
-        const deptStats = stats.byDepartment[dept] || { total: 0, completed: 0, delayed: 0 };
-        const pending = deptStats.total - deptStats.completed;
-        const avgTime = calculateAvgCompletionTime(dept);
-        
-        return [
-          dept,
-          deptStats.total.toString(),
-          deptStats.completed.toString(),
-          pending.toString(),
-          deptStats.delayed.toString(),
-          avgTime
-        ];
-      }).filter(row => parseInt(row[1]) > 0); // Only include departments with requests
-      
-      // @ts-ignore - jspdf-autotable types are not included
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      const title = isCustomDateRange
+        ? `Ozel Rapor (${dateRange.startDate ? format(dateRange.startDate, "dd.MM.yyyy") : ""} - ${dateRange.endDate ? format(dateRange.endDate, "dd.MM.yyyy") : ""})`
+        : reportType === "daily" ? "Gunluk Rapor" : reportType === "weekly" ? "Haftalik Rapor" : "Aylik Rapor";
+      const nowText = format(new Date(), "dd.MM.yyyy HH:mm:ss");
+      const duration = (req: Request) => {
+        if (!req.completedAt) return "-";
+        const mins = Math.max(0, Math.round((new Date(req.completedAt).getTime() - new Date(req.createdAt).getTime()) / 60000));
+        return mins < 60 ? `${mins} dk` : `${Math.floor(mins / 60)}s ${mins % 60}dk`;
+      };
+      doc.setFontSize(18); doc.text("Otel Operasyon Raporu", 14, 15);
+      doc.setFontSize(11); doc.text(title, 14, 22); doc.text(`Olusturulma: ${nowText}`, 14, 28);
+      doc.setFontSize(13); doc.text("Ozet", 14, 38);
+      autoTable(doc, { startY: 42, head: [["Toplam", "Tamamlanan", "Islemde", "Beklemede", "Geciken", "Tamamlama %"]], body: [[stats.total, stats.completed, stats.inProgress, stats.pending, stats.delayed, stats.total ? `${Math.round(stats.completed / stats.total * 100)}%` : "0%"]], styles: { fontSize: 9 } });
+      let y = (doc as any).lastAutoTable.finalY + 8;
+      doc.setFontSize(13); doc.text("Departman Analizi", 14, y); y += 4;
+      const deptRows = departments.map(dept => { const d = stats.byDepartment[dept] || {total:0,completed:0,delayed:0}; return [dept, d.total, d.completed, d.total-d.completed, d.delayed, calculateAvgCompletionTime(dept)]; }).filter(r => Number(r[1]) > 0);
+      autoTable(doc, { startY: y, head: [["Departman","Toplam","Tamamlanan","Bekleyen","Geciken","Ort. Sure"]], body: deptRows, styles:{fontSize:8}, margin:{left:14,right:14} });
+
+      doc.addPage();
+      doc.setFontSize(15); doc.text("Detayli Talep Listesi", 14, 15);
+      const detailRows = reportData.map(req => [
+        `#${req.id}`, req.roomNumber, req.department, req.priority || "normal", req.status,
+        req.createdByUser ? `${req.createdByUser.firstName} ${req.createdByUser.lastName}` : "-",
+        req.assignedUser ? `${req.assignedUser.firstName} ${req.assignedUser.lastName}` : "-",
+        format(new Date(req.createdAt), "dd.MM.yyyy HH:mm"),
+        req.completedAt ? format(new Date(req.completedAt), "dd.MM.yyyy HH:mm") : "-",
+        duration(req),
+        req.deadline ? format(new Date(req.deadline), "dd.MM.yyyy HH:mm") : "-",
+        (req.request || "").replace(/\s+/g," ").slice(0, 70)
+      ]);
       autoTable(doc, {
-        head: [['Departman', 'Toplam İstek', 'Tamamlanan', 'Bekleyen', 'Geciken', 'Ort. Tamamlanma']],
-        body: departmentTableData,
-        startY: 115,
-        headStyles: { fillColor: [41, 128, 185] },
-        alternateRowStyles: { fillColor: [240, 240, 240] }
+        startY: 20,
+        head: [["ID","Oda","Departman","Oncelik","Durum","Olusturan","Atanan","Olusturma","Tamamlanma","Sure","Deadline","Talep"]],
+        body: detailRows,
+        styles:{fontSize:6.5,cellPadding:2,overflow:'linebreak'},
+        headStyles:{fontSize:6.5},
+        columnStyles:{0:{cellWidth:9},1:{cellWidth:12},2:{cellWidth:22},3:{cellWidth:13},4:{cellWidth:18},5:{cellWidth:25},6:{cellWidth:25},7:{cellWidth:27},8:{cellWidth:27},9:{cellWidth:14},10:{cellWidth:27},11:{cellWidth:50}},
+        margin:{left:8,right:8,top:20,bottom:12},
+        didDrawPage: data => { doc.setFontSize(7); doc.text(`Sayfa ${data.pageNumber}`, 270, 202); }
       });
-      
-      // Save PDF
-      const fileName = `otel-istek-raporu-${format(new Date(), "yyyy-MM-dd")}.pdf`;
-      doc.save(fileName);
+
+      doc.addPage(); doc.setFontSize(15); doc.text("Talep Aciklama Ekleri", 14, 15);
+      const appendixRows = reportData.map(req => [`#${req.id} / Oda ${req.roomNumber}`, `${req.department} / ${req.status}`, req.request || "-"]);
+      autoTable(doc, { startY:20, head:[["Talep","Durum","Tam Aciklama"]], body:appendixRows, styles:{fontSize:8,cellPadding:3,overflow:'linebreak'}, columnStyles:{0:{cellWidth:35},1:{cellWidth:40},2:{cellWidth:190}}, margin:{left:8,right:8,top:20,bottom:12}, didDrawPage:data=>{doc.setFontSize(7);doc.text(`Sayfa ${data.pageNumber}`,270,202);} });
+      doc.save(`otel-operasyon-raporu-${format(new Date(), "yyyy-MM-dd-HHmm")}.pdf`);
     } catch (error) {
       console.error("PDF oluşturma hatası:", error);
       alert("PDF oluşturulurken bir hata oluştu: " + error);
     }
   };
-  
+
   return (
     <div className="p-6">
       <Card>
