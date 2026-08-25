@@ -192,7 +192,7 @@ export default function Reports({ requests, reportType, setReportType, loading }
       doc.addPage(); doc.setFontSize(15); doc.text("Talep Aciklama Ekleri", 14, 15);
       const appendixRows = reportData.map(req => [`#${req.id} / Oda ${req.roomNumber}`, `${req.department} / ${req.status}`, req.request || "-"]);
       autoTable(doc, { startY:20, head:[["Talep","Durum","Tam Aciklama"]], body:appendixRows, styles:{fontSize:8,cellPadding:3,overflow:'linebreak'}, columnStyles:{0:{cellWidth:35},1:{cellWidth:40},2:{cellWidth:190}}, margin:{left:8,right:8,top:20,bottom:12}, didDrawPage:data=>{doc.setFontSize(7);doc.text(`Sayfa ${data.pageNumber}`,270,202);} });
-      doc.save(`otel-operasyon-raporu-${format(new Date(), "yyyy-MM-dd-HHmm")}.pdf`);
+      const blob = doc.output('blob'); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `otel-operasyon-raporu-${format(new Date(), "yyyy-MM-dd-HHmm")}.pdf`; a.style.display='none'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
     } catch (error) {
       console.error("PDF oluşturma hatası:", error);
       alert("PDF oluşturulurken bir hata oluştu: " + error);
