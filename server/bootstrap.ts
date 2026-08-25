@@ -192,7 +192,7 @@ export async function bootstrapUsers() {
     console.log(`Bootstrap: default hotel created (id=${adminHotelId}).`);
   }
 
-  for (const [name, code] of [['Ana Depo','ANA'],['F&B Depo','FB'],['Mutfak Depo','MUTFAK'],['FO Depo','FO']]) { await pool.query(`INSERT INTO inventory_stores(hotel_id,name,code) VALUES($1,$2,$3) ON CONFLICT(hotel_id,code) DO NOTHING`, [adminHotelId,name,code]); }
+  for (const [name, code] of [['Ana Depo','ANA'],['F&B Depo','FB'],['Mutfak Depo','MUTFAK'],['FO Depo','FO'],['HK Depo','HK'],['Teknik Depo','TEKNIK']]) { await pool.query(`INSERT INTO inventory_stores(hotel_id,name,code) VALUES($1,$2,$3) ON CONFLICT(hotel_id,code) DO NOTHING`, [adminHotelId,name,code]); }
   await seedDefaultSlaPolicies(adminHotelId);
 
   const existingSuperadmin = await db.select().from(users).where(eq(users.username, superadminUsername)).limit(1);

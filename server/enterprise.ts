@@ -59,7 +59,7 @@ export async function initializeEnterpriseSchema() {
     const ana = (await pool.query(`SELECT id FROM inventory_stores WHERE hotel_id=$1 AND code='ANA' LIMIT 1`, [h.id])).rows[0];
     if (legacy && !ana) await pool.query(`UPDATE inventory_stores SET name='Ana Depo',code='ANA' WHERE id=$1`, [legacy.id]);
     if (legacy && ana) await pool.query(`UPDATE inventory_stores SET active=false,name='Legacy Main Store' WHERE id=$1`, [legacy.id]);
-    const stores = [['Ana Depo','ANA'],['F&B Depo','FB'],['Mutfak Depo','MUTFAK'],['FO Depo','FO']];
+    const stores = [['Ana Depo','ANA'],['F&B Depo','FB'],['Mutfak Depo','MUTFAK'],['FO Depo','FO'],['HK Depo','HK'],['Teknik Depo','TEKNIK']];
     for (const [name, code] of stores) await pool.query(`INSERT INTO inventory_stores(hotel_id,name,code) VALUES($1,$2,$3) ON CONFLICT(hotel_id,code) DO NOTHING`, [h.id,name,code]);
   }
   for (const h of hotels) {
