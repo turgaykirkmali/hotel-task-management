@@ -158,3 +158,18 @@
     @apply font-sans antialiased bg-background text-foreground;
   }
 }
+
+/* Premium interaction layer - preserves the original light UI while adding depth and visual hierarchy. */
+@layer components {
+  .app-surface { @apply bg-white border border-slate-200/80 shadow-sm rounded-2xl; }
+  .app-icon-tile { @apply inline-flex items-center justify-center rounded-xl ring-1 ring-black/5 shadow-sm transition-all duration-200; }
+  .app-icon-tile:hover { @apply -translate-y-0.5 shadow-md; }
+  .nav-icon-active { filter: drop-shadow(0 2px 5px rgba(15,23,42,.12)); }
+}
+
+/* Smooth, subtle scrollbar for dense hotel-operation screens. */
+* { scrollbar-width: thin; scrollbar-color: rgba(100,116,139,.25) transparent; }
+*::-webkit-scrollbar { width: 7px; height: 7px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: rgba(100,116,139,.22); border-radius: 999px; }
+*::-webkit-scrollbar-thumb:hover { background: rgba(100,116,139,.38); }

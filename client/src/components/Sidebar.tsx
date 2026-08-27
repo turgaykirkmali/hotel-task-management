@@ -1,4 +1,4 @@
-import { Home, ClipboardList, FileText, Settings, Bell, PlusCircle, LogOut, Building2, ChevronDown, SmilePlus, ShoppingBag, Trophy, BarChart3, PlugZap, MessageSquareText, Package } from 'lucide-react';
+import { Home, ClipboardList, FileText, Settings, PlusCircle, LogOut, Building2, SmilePlus, ShoppingBag, Trophy, BarChart3, PlugZap, MessageSquareText, Package, Warehouse, Sparkles, ChevronRight, BellRing } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { 
   Select, 
@@ -65,20 +65,28 @@ export default function Sidebar({
   };
   
   return (
-    <aside className={`bg-white w-64 flex-shrink-0 border-r border-gray-200 shadow-sm lg:relative h-full fixed inset-y-0 left-0 z-30 lg:translate-x-0 transform transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+    <aside className={`bg-white w-72 flex-shrink-0 border-r border-slate-200/80 shadow-[4px_0_24px_rgba(15,23,42,0.04)] lg:relative h-full fixed inset-y-0 left-0 z-30 lg:translate-x-0 transform transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
       <div className="h-full flex flex-col">
         {/* App Logo */}
-        <div className="flex flex-col items-center justify-center h-auto py-3 border-b border-gray-200">
-          <h1 className="text-xl font-semibold text-primary">Otel İstek Sistemi</h1>
+        <div className="px-5 py-5 border-b border-slate-100 bg-gradient-to-br from-white via-slate-50/60 to-primary/[0.04]">
+          <div className="flex items-center gap-3">
+            <div className="h-11 w-11 rounded-2xl bg-gradient-to-br from-primary to-primary/75 text-white flex items-center justify-center shadow-lg shadow-primary/20">
+              <Building2 className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-[15px] font-bold tracking-tight text-slate-900">Hotel Operations</h1>
+              <p className="text-[11px] font-medium text-slate-500 tracking-wide">TASK MANAGEMENT</p>
+            </div>
+          </div>
           {hotelName && !userRole?.includes('superadmin') && (
-            <div className="text-sm font-medium text-gray-600 mt-1">{hotelName}</div>
+            <div className="mt-3 px-3 py-2 rounded-xl bg-white border border-slate-200/80 text-xs font-semibold text-slate-600 truncate shadow-sm">{hotelName}</div>
           )}
         </div>
         
         {/* User Profile */}
-        <div className="p-4 border-b border-gray-200">
-          <div className="flex items-center">
-            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold">
+        <div className="p-4 border-b border-slate-100">
+          <div className="flex items-center p-2 rounded-2xl bg-slate-50/80 border border-slate-100">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/15 to-primary/5 flex items-center justify-center text-primary font-bold ring-1 ring-primary/10">
               {currentUser.charAt(0)}
             </div>
             <div className="ml-3">
@@ -122,20 +130,21 @@ export default function Sidebar({
         )}
         
         {/* Navigation Links */}
-        <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
+        <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
+          <div className="px-2 pb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Operasyon</div>
           <button 
-            className={`flex items-center w-full px-4 py-2 text-sm font-medium rounded-md ${activeTab === "dashboard" ? "bg-primary/10 text-primary" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`}
+            className={`group flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 ${activeTab === "dashboard" ? "bg-primary text-primary-foreground shadow-md shadow-primary/15" : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"}`}
             onClick={() => handleTabClick("dashboard")}
           >
-            <Home className="h-5 w-5 mr-3" />
+            <Home className="h-[18px] w-[18px] mr-3 shrink-0 transition-transform duration-200 group-hover:scale-110" />
             Gösterge Paneli
           </button>
           
           <button 
-            className={`flex items-center w-full px-4 py-2 text-sm font-medium rounded-md ${activeTab === "requests" ? "bg-primary/10 text-primary" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`}
+            className={`group flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 ${activeTab === "requests" ? "bg-primary text-primary-foreground shadow-md shadow-primary/15" : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"}`}
             onClick={() => handleTabClick("requests")}
           >
-            <ClipboardList className="h-5 w-5 mr-3" />
+            <ClipboardList className="h-[18px] w-[18px] mr-3 shrink-0 transition-transform duration-200 group-hover:scale-110" />
             İstek Listesi
             {notificationCount > 0 && (
               <span className="ml-auto bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full text-xs font-medium">
@@ -145,51 +154,53 @@ export default function Sidebar({
           </button>
           
           <button 
-            className={`flex items-center w-full px-4 py-2 text-sm font-medium rounded-md ${activeTab === "new-request" ? "bg-primary/10 text-primary" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`}
+            className={`group flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 ${activeTab === "new-request" ? "bg-primary text-primary-foreground shadow-md shadow-primary/15" : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"}`}
             onClick={() => handleTabClick("new-request")}
           >
-            <PlusCircle className="h-5 w-5 mr-3" />
+            <PlusCircle className="h-[18px] w-[18px] mr-3 shrink-0 transition-transform duration-200 group-hover:scale-110" />
             Yeni İstek Oluştur
           </button>
           
           <button 
-            className={`flex items-center w-full px-4 py-2 text-sm font-medium rounded-md ${activeTab === "operations" ? "bg-primary/10 text-primary" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`}
+            className={`group flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 ${activeTab === "operations" ? "bg-primary text-primary-foreground shadow-md shadow-primary/15" : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"}`}
             onClick={() => handleTabClick("operations")}
           >
-            <BarChart3 className="h-5 w-5 mr-3" />
+            <BarChart3 className="h-[18px] w-[18px] mr-3 shrink-0 transition-transform duration-200 group-hover:scale-110" />
             Operasyon Merkezi
           </button>
 
-          <button className={`flex items-center w-full px-4 py-2 text-sm font-medium rounded-md ${activeTab === "integrations" ? "bg-primary/10 text-primary" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`} onClick={() => handleTabClick("integrations")}><PlugZap className="h-5 w-5 mr-3" />Entegrasyonlar</button>
-          <button className={`flex items-center w-full px-4 py-2 text-sm font-medium rounded-md ${activeTab === "reviews" ? "bg-primary/10 text-primary" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`} onClick={() => handleTabClick("reviews")}><MessageSquareText className="h-5 w-5 mr-3" />Review Tracker</button>
-          <button className={`flex items-center w-full px-4 py-2 text-sm font-medium rounded-md ${activeTab === "inventory" ? "bg-primary/10 text-primary" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`} onClick={() => handleTabClick("inventory")}><Package className="h-5 w-5 mr-3" />Stok Yönetimi</button>
+          <button className={`group flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 ${activeTab === "integrations" ? "bg-primary text-primary-foreground shadow-md shadow-primary/15" : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"}`} onClick={() => handleTabClick("integrations")}><PlugZap className="h-[18px] w-[18px] mr-3 shrink-0 transition-transform duration-200 group-hover:scale-110" />Entegrasyonlar</button>
+          <button className={`group flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 ${activeTab === "reviews" ? "bg-primary text-primary-foreground shadow-md shadow-primary/15" : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"}`} onClick={() => handleTabClick("reviews")}><MessageSquareText className="h-[18px] w-[18px] mr-3 shrink-0 transition-transform duration-200 group-hover:scale-110" />Review Tracker</button>
+          <button className={`group flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 ${activeTab === "inventory" ? "bg-primary text-primary-foreground shadow-md shadow-primary/15" : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"}`} onClick={() => handleTabClick("inventory")}><Package className="h-[18px] w-[18px] mr-3 shrink-0 transition-transform duration-200 group-hover:scale-110" />Stok Yönetimi</button>
 
+          <div className="px-2 pt-5 pb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Analiz & Yönetim</div>
           <button 
-            className={`flex items-center w-full px-4 py-2 text-sm font-medium rounded-md ${activeTab === "reports" ? "bg-primary/10 text-primary" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`}
+            className={`group flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 ${activeTab === "reports" ? "bg-primary text-primary-foreground shadow-md shadow-primary/15" : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"}`}
             onClick={() => handleTabClick("reports")}
           >
-            <FileText className="h-5 w-5 mr-3" />
+            <FileText className="h-[18px] w-[18px] mr-3 shrink-0 transition-transform duration-200 group-hover:scale-110" />
             Raporlar
           </button>
           
           <button 
-            className={`flex items-center w-full px-4 py-2 text-sm font-medium rounded-md ${activeTab === "mood-board" ? "bg-primary/10 text-primary" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`}
+            className={`group flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 ${activeTab === "mood-board" ? "bg-primary text-primary-foreground shadow-md shadow-primary/15" : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"}`}
             onClick={() => handleTabClick("mood-board")}
           >
-            <SmilePlus className="h-5 w-5 mr-3" />
+            <SmilePlus className="h-[18px] w-[18px] mr-3 shrink-0 transition-transform duration-200 group-hover:scale-110" />
             Duygu Durumu
           </button>
           
           <button 
-            className={`flex items-center w-full px-4 py-2 text-sm font-medium rounded-md ${activeTab === "badges" ? "bg-primary/10 text-primary" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`}
+            className={`group flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 ${activeTab === "badges" ? "bg-primary text-primary-foreground shadow-md shadow-primary/15" : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"}`}
             onClick={() => handleTabClick("badges")}
           >
-            <Trophy className="h-5 w-5 mr-3" />
+            <Trophy className="h-[18px] w-[18px] mr-3 shrink-0 transition-transform duration-200 group-hover:scale-110" />
             Rozetler
           </button>
           
+          <div className="px-2 pt-5 pb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Deneyim & Sistem</div>
           <button 
-            className={`flex items-center w-full px-4 py-2 text-sm font-medium rounded-md ${activeTab === "closet-ar" ? "bg-primary/10 text-primary" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`}
+            className={`group flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 ${activeTab === "closet-ar" ? "bg-primary text-primary-foreground shadow-md shadow-primary/15" : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"}`}
             onClick={() => {
               // Wouter'ın useLocation hook'unu kullanarak sayfa yönlendirmesi yap
               setLocation("/closet-ar");
@@ -200,15 +211,15 @@ export default function Sidebar({
               }
             }}
           >
-            <ShoppingBag className="h-5 w-5 mr-3" />
+            <ShoppingBag className="h-[18px] w-[18px] mr-3 shrink-0 transition-transform duration-200 group-hover:scale-110" />
             ClosetAR
           </button>
           
           <button 
-            className={`flex items-center w-full px-4 py-2 text-sm font-medium rounded-md ${activeTab === "settings" ? "bg-primary/10 text-primary" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`}
+            className={`group flex items-center w-full px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 ${activeTab === "settings" ? "bg-primary text-primary-foreground shadow-md shadow-primary/15" : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"}`}
             onClick={() => handleTabClick("settings")}
           >
-            <Settings className="h-5 w-5 mr-3" />
+            <Settings className="h-[18px] w-[18px] mr-3 shrink-0 transition-transform duration-200 group-hover:scale-110" />
             Ayarlar
           </button>
         </nav>
@@ -216,7 +227,7 @@ export default function Sidebar({
         <div className="p-4 border-t border-gray-200 mt-auto">
           <Button
             variant="outline"
-            className="w-full flex items-center justify-center text-gray-600 hover:text-gray-900"
+            className="w-full h-10 rounded-xl flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 border-slate-200"
             onClick={onLogout}
           >
             <LogOut className="h-4 w-4 mr-2" />

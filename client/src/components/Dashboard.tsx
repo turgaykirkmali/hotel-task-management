@@ -1,4 +1,4 @@
-import { PieChart, ClipboardList, Clock, CheckCircle, AlertTriangle } from 'lucide-react';
+import { ClipboardList, Clock, CheckCircle, AlertTriangle, ArrowUpRight } from 'lucide-react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import DepartmentProgress from './DepartmentProgress';
@@ -44,9 +44,10 @@ export default function Dashboard({ requests, loading, onFilterChange }: Dashboa
     <div className="p-6">
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
         {/* Total Requests Card */}
-        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => onFilterChange && onFilterChange("all")}>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
+        <Card className="cursor-pointer border-slate-200/80 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 overflow-hidden group" onClick={() => onFilterChange && onFilterChange("all")}>
+          <CardContent className="p-6 relative">
+            <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-primary/[0.05] group-hover:scale-125 transition-transform duration-500" />
+            <div className="flex items-center justify-between relative">
               <div>
                 <p className="text-sm font-medium text-gray-500">Toplam İstek</p>
                 {loading ? (
@@ -55,7 +56,7 @@ export default function Dashboard({ requests, loading, onFilterChange }: Dashboa
                   <p className="text-3xl font-bold">{totalRequests}</p>
                 )}
               </div>
-              <div className="bg-primary/10 p-3 rounded-md">
+              <div className="bg-primary/10 p-3.5 rounded-2xl ring-1 ring-primary/10 group-hover:scale-105 transition-transform">
                 <ClipboardList className="h-8 w-8 text-primary" />
               </div>
             </div>
@@ -63,9 +64,10 @@ export default function Dashboard({ requests, loading, onFilterChange }: Dashboa
         </Card>
         
         {/* Pending Requests Card */}
-        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => onFilterChange && onFilterChange("beklemede")}>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
+        <Card className="cursor-pointer border-slate-200/80 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 overflow-hidden group" onClick={() => onFilterChange && onFilterChange("beklemede")}>
+          <CardContent className="p-6 relative">
+            <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-slate-100/80 group-hover:scale-125 transition-transform duration-500" />
+            <div className="flex items-center justify-between relative">
               <div>
                 <p className="text-sm font-medium text-gray-500">Bekleyen İstekler</p>
                 {loading ? (
@@ -74,7 +76,7 @@ export default function Dashboard({ requests, loading, onFilterChange }: Dashboa
                   <p className="text-3xl font-bold text-yellow-600 animate-pulse">{pendingRequests}</p>
                 )}
               </div>
-              <div className="bg-yellow-100 p-3 rounded-md">
+              <div className="bg-yellow-100 p-3.5 rounded-2xl ring-1 ring-yellow-200 group-hover:scale-105 transition-transform">
                 <Clock className="h-8 w-8 text-yellow-600" />
               </div>
             </div>
@@ -82,9 +84,10 @@ export default function Dashboard({ requests, loading, onFilterChange }: Dashboa
         </Card>
         
         {/* Delayed Requests Card */}
-        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => onFilterChange && onFilterChange("geciken")}>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
+        <Card className="cursor-pointer border-slate-200/80 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 overflow-hidden group" onClick={() => onFilterChange && onFilterChange("geciken")}>
+          <CardContent className="p-6 relative">
+            <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-slate-100/80 group-hover:scale-125 transition-transform duration-500" />
+            <div className="flex items-center justify-between relative">
               <div>
                 <p className="text-sm font-medium text-gray-500">Geciken İstekler</p>
                 {loading ? (
@@ -93,7 +96,7 @@ export default function Dashboard({ requests, loading, onFilterChange }: Dashboa
                   <p className="text-3xl font-bold text-red-600 animate-pulse">{delayedRequests}</p>
                 )}
               </div>
-              <div className="bg-red-100 p-3 rounded-md">
+              <div className="bg-red-100 p-3.5 rounded-2xl ring-1 ring-red-200 group-hover:scale-105 transition-transform">
                 <AlertTriangle className="h-8 w-8 text-red-600" />
               </div>
             </div>
@@ -101,9 +104,10 @@ export default function Dashboard({ requests, loading, onFilterChange }: Dashboa
         </Card>
         
         {/* Completed Requests Card */}
-        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => onFilterChange && onFilterChange("tamamlandı")}>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
+        <Card className="cursor-pointer border-slate-200/80 shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 overflow-hidden group" onClick={() => onFilterChange && onFilterChange("tamamlandı")}>
+          <CardContent className="p-6 relative">
+            <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-slate-100/80 group-hover:scale-125 transition-transform duration-500" />
+            <div className="flex items-center justify-between relative">
               <div>
                 <p className="text-sm font-medium text-gray-500">Tamamlanan İstekler</p>
                 {loading ? (
@@ -112,7 +116,7 @@ export default function Dashboard({ requests, loading, onFilterChange }: Dashboa
                   <p className="text-3xl font-bold text-green-600">{completedRequests}</p>
                 )}
               </div>
-              <div className="bg-green-100 p-3 rounded-md">
+              <div className="bg-green-100 p-3.5 rounded-2xl ring-1 ring-green-200 group-hover:scale-105 transition-transform">
                 <CheckCircle className="h-8 w-8 text-green-600" />
               </div>
             </div>
